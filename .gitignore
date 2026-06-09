@@ -1,0 +1,4 @@
+# Cerebro runtime ignores live in .cerebro/.gitignore
+node_modules/
+dist/
+.cache/

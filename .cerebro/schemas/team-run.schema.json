@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cerebro Team Run Manifest",
+  "description": "Coordination audit log for a single OpenCode-managed Cerebro run. Task progress lives in .cerebro/team-runs/{run_id}.tasks.json via cerebro_task_* tools.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "run_id",
+    "command",
+    "status",
+    "lead",
+    "team_name",
+    "objective",
+    "risk_level",
+    "started_at",
+    "updated_at",
+    "teammates",
+    "ownership",
+    "mailbox_decisions",
+    "approvals",
+    "verification",
+    "cleanup"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "description": "YYYYMMDD-HHMMSS-{slug}",
+      "minLength": 1
+    },
+    "command": {
+      "type": "string",
+      "enum": ["/to-me-my-x-men", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index", "/cerebro-doctor", "/cerebro-reset"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["planning", "running", "blocked", "completed", "cleaned_up"]
+    },
+    "lead": {
+      "type": "string",
+      "const": "cerebro"
+    },
+    "team_name": {
+      "type": "string",
+      "description": "Stable team/session name used to group Cerebro tasks, mailbox messages, checkpoints, and pending todos",
+      "minLength": 1
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH"]
+    },
+    "started_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "teammates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/teammate"
+      }
+    },
+    "ownership": {
+      "type": "array",
+      "description": "File ownership assignments — prevent two writers on the same file",
+      "items": {
+        "$ref": "#/$defs/ownership_entry"
+      }
+    },
+    "mailbox_decisions": {
+      "type": "array",
+      "description": "Decisions recorded via cerebro_mailbox_send that resolve cross-agent conflicts or assumptions",
+      "items": {
+        "$ref": "#/$defs/mailbox_decision"
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/approval"
+      }
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/verification_entry"
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["team_stopped", "pending_todos_clear", "notes"],
+      "properties": {
+        "team_stopped": {
+          "type": "boolean"
+        },
+        "pending_todos_clear": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "teammate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "agent_type", "status", "responsibility", "last_signal"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agent_type": {
+          "type": "string",
+          "enum": ["cerebro", "legion", "cypher", "cyclops", "wolverine", "storm", "professor-x", "beast", "emma-frost", "nightcrawler", "sage", "forge"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "active", "idle", "done", "blocked"]
+        },
+        "responsibility": {
+          "type": "string"
+        },
+        "last_signal": {
+          "type": "string"
+        }
+      }
+    },
+    "ownership_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "owner", "reviewer", "notes"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "mailbox_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "from", "to", "decision", "notes"],
+      "properties": {
+        "at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate", "status", "decided_at", "notes"],
+      "properties": {
+        "gate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"]
+        },
+        "decided_at": {
+          "type": ["string", "null"]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "verification_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "status", "by", "notes"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": ["NOT RUN", "PASS", "FAIL", "BLOCKED"]
+        },
+        "by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

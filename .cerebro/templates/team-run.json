@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "run_id": "20260522-000000-example-run",
+  "command": "/to-me-my-x-men",
+  "status": "planning",
+  "lead": "cerebro",
+  "team_name": "replace-with-team-name",
+  "objective": "replace with the user objective",
+  "risk_level": "LOW",
+  "started_at": "2026-05-22T00:00:00Z",
+  "updated_at": "2026-05-22T00:00:00Z",
+  "teammates": [],
+  "ownership": [],
+  "mailbox_decisions": [],
+  "approvals": [],
+  "verification": [],
+  "cleanup": {
+    "team_stopped": false,
+    "pending_todos_clear": false,
+    "notes": ""
+  }
+}

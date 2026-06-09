@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cerebro Boulder Execution State",
+  "description": "Business-level execution checkpoint. Task progress lives in .cerebro/team-runs/{run_id}.tasks.json via cerebro_task_* tools — do not duplicate it here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "active_plan",
+    "plan_name",
+    "status",
+    "risk_level",
+    "team_name",
+    "started_at",
+    "updated_at",
+    "approval_gates",
+    "verification_history",
+    "decisions"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 2
+    },
+    "active_plan": {
+      "type": "string",
+      "description": "Path to the active .cerebro/plans/*.md plan, or an empty string before a plan is selected"
+    },
+    "plan_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["not_started", "in_progress", "blocked", "completed"]
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH"]
+    },
+    "team_name": {
+      "type": "string",
+      "description": "Active team/session name used to group Cerebro tasks, mailbox messages, checkpoints, and pending todos"
+    },
+    "started_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approval_gates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/approval_gate"
+      }
+    },
+    "verification_history": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/verification_entry"
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "Architectural and approval decisions made during execution",
+      "items": {
+        "$ref": "#/$defs/decision"
+      }
+    }
+  },
+  "$defs": {
+    "approval_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "decided_at", "decision_by", "notes"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"]
+        },
+        "decided_at": {
+          "type": ["string", "null"]
+        },
+        "decision_by": {
+          "type": ["string", "null"]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "verification_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "result", "verified_at", "notes"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "BLOCKED"]
+        },
+        "verified_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "topic", "decision", "rationale"],
+      "properties": {
+        "at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "topic": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

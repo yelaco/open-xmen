@@ -1,0 +1,26 @@
+# Cerebro runtime state — project-specific, never committed
+__pycache__/
+*.py[cod]
+
+boulder.json
+.pending-todos
+pending-todos/
+auto-upgrade.json
+/project-context.md
+
+# Accumulated wisdom is per-project
+notepads/**
+!notepads/
+!notepads/.gitkeep
+
+plans/**
+!plans/
+!plans/.gitkeep
+
+team-runs/**
+!team-runs/
+!team-runs/.gitkeep
+
+# Templates are part of the toolkit — always tracked, never caught by runtime patterns above
+!/templates/
+!/templates/**
