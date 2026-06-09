@@ -61,22 +61,27 @@ Do not modify source files outside \`.cerebro/project-context.md\` and run metad
   },
   {
     name: "cerebro-plan",
-    description: "Planning mode with Professor X, Beast, and optional Legion/Cypher consultation.",
+    description: "Interactive planning mode — Cypher interviews the user, Professor X drafts, Beast and Emma Frost review.",
     model: COMMAND_MODEL,
     content: `Plan this work: $ARGUMENTS
 
 ## Required flow
 
 1. Announce strategic planning mode.
-2. If the objective is ambiguous and cannot be safely inferred from repository inspection, ask one focused question before drafting. Otherwise proceed.
-3. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-plan\`, the objective, and risk classification \`LOW\`, \`MEDIUM\`, or \`HIGH\`.
-4. Gather context first: use Nightcrawler for codebase search and Sage for current docs only when needed.
-5. **Optional — product-shaped or vague work only**: use Legion for customer vision and Cypher for requirements under \`.cerebro/notepads/\`. Skip for clearly technical tasks where requirements are already concrete.
-6. Use Professor X to draft the plan from \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task in the plan must include a \`Category\` field (visual-engineering | architecture | explore | research | deep | quick).
-7. Use Beast for gap review. Use Emma Frost for HIGH risk, public API, auth, data, billing, migration, or high-accuracy plans.
-8. Iterate until review blockers are addressed.
-9. Write the final approved plan to \`.cerebro/plans/{slug}.md\`.
-10. Checkpoint and report the plan path, risk, approval gates, acceptance criteria, and verification commands.
+2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-plan\` and initial risk classification.
+3. **Classify intent sub-type**: \`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`. Announce it in one line.
+4. Gather codebase context: use Nightcrawler for structure and Sage for relevant docs before the interview begins.
+5. **Legion** (product-shaped or user-facing work only): dispatch Legion to produce customer vision. Pass Legion's \`CUSTOMER_VISION_READY\` to Cypher as context.
+6. **Cypher** (\`MODE: interactive\`): dispatch Cypher with the request, intent sub-type, Legion's vision (if produced), and \`MODE: interactive\`. Run the interview loop:
+   - Cypher returns \`CLARIFY\` with a prioritized question list.
+   - Present the questions to the user in a clean numbered list (in Cerebro's voice — do not expose Cypher's raw block).
+   - Collect answers and pass back to Cypher.
+   - Repeat until Cypher returns \`REQUIREMENTS_READY\` (max 3 rounds).
+7. **Professor X**: draft the plan from \`REQUIREMENTS_READY\` using \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task must include a \`Category\` field (visual-engineering | architecture | explore | research | deep | quick).
+8. **Beast**: gap review. **Emma Frost**: validate if HIGH risk, public API, auth, data, billing, or migration work.
+9. Iterate on the plan until all review blockers are resolved.
+10. Write the approved plan to \`.cerebro/plans/{slug}.md\`.
+11. Checkpoint and report: plan path, risk, approval gates, acceptance criteria, and verification commands.
 
 Do not implement the plan in this command.`,
   },
@@ -104,28 +109,29 @@ Do not implement the plan in this command.`,
   },
   {
     name: "to-me-my-x-men",
-    description: "Autonomous Cerebro full-team mode for best-effort execution.",
+    description: "Fully autonomous Cerebro full-team mode. One prompt in, complete result out — no user interaction after trigger.",
     model: COMMAND_MODEL,
     content: `Assemble the full Cerebro team for autonomous execution of: $ARGUMENTS
 
-## Best-effort standard
+## Autonomous standard
 
-The user expects the best the team can produce, not the minimum viable version. Prefer excellent architecture, complete UX states, strong verification, and polished results. Fast is good; generic and under-verified is failure.
+The user has given one prompt and expects a complete result with no further questions. Every ambiguity is resolved by codebase inspection or documented as an assumption. Do not ask the user anything. If HIGH risk, pause only for explicit confirmation on destructive/production/credentialed/billing/legal/git-history actions — nothing else.
 
 ## Required flow
 
-1. Announce maximum Cerebro power.
-2. Classify mission shape and risk. If HIGH risk, ask for explicit confirmation before destructive/production/credentialed/data/billing/legal/git-history actions.
-3. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/to-me-my-x-men\`.
-4. **Requirements gathering (product-shaped work only)**: For product or feature missions where intent is vague or user-facing, consult Legion (customer vision) and Cypher (requirements). For clearly technical or scoped tasks, skip directly to planning. Ask one focused confirmation question for non-inferable blockers only — do not stack questions.
-5. Promote requirements into a Professor X plan (from \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`), reviewed by Beast and validated by Emma Frost when risk/complexity warrants. Each task must include a \`Category\` field (visual-engineering | architecture | explore | research | deep | quick).
-6. Create task records and **dispatch Cyclops as execution conductor**: hand off the full task list and plan context. Cyclops routes by category, manages worker sequencing, verifies results, and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
-7. On EXECUTION_BLOCKED: unblock or escalate; re-dispatch Cyclops to resume.
-8. Maintain task-scoped todos and record mailbox decisions/checkpoints.
-9. Run final Legion acceptance if mission is product-shaped. A Legion reject creates retry tasks before completion.
-10. Call \`cerebro_verify_pending\`; final-report only when todos are clear or explicitly blocked.
+1. Announce maximum Cerebro power and the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`).
+2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/to-me-my-x-men\` and classified risk.
+3. **Legion** (product-shaped work only): dispatch Legion to produce customer vision from the prompt and codebase. Legion writes \`CUSTOMER_VISION_READY\` under \`.cerebro/notepads/customer/\` — no user questions.
+4. **Cypher** (\`MODE: autonomous\`): dispatch Cypher with the original prompt, intent sub-type, Legion's vision (if produced), and \`MODE: autonomous\`. Cypher produces \`REQUIREMENTS_READY\` directly — using safe defaults and documenting all assumptions. No CLARIFY rounds.
+5. **Professor X**: draft the plan from \`REQUIREMENTS_READY\` using \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task must include a \`Category\` field (visual-engineering | architecture | explore | research | deep | quick).
+6. **Beast**: gap review. **Emma Frost**: validate if HIGH risk, auth, billing, migration, or data-integrity work.
+7. Write approved plan to \`.cerebro/plans/{slug}.md\`.
+8. Create task records and **dispatch Cyclops as execution conductor**: hand off the full task list, run_id, and plan. Cyclops routes by category, manages worker sequencing, tracks wisdom, verifies results, and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
+9. On EXECUTION_BLOCKED: resolve autonomously if possible; escalate to user only if truly unresolvable.
+10. **Legion acceptance** (product-shaped work only): dispatch Legion for a final customer verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-dispatches Cyclops.
+11. Call \`cerebro_verify_pending\`; final-report only when todos are clear or explicitly blocked.
 
-Final report must include assumptions, files changed, tests/verification, customer acceptance verdict (if applicable), unresolved issues, and \`.cerebro\` run paths.`,
+Final report: assumptions made, files changed, tests/verification, customer verdict (if run), unresolved issues, \`.cerebro\` run paths.`,
   },
 ];
 

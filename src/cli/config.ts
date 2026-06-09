@@ -22,6 +22,7 @@ export function updateOpencodeConfig(target: string, opts: { dryRun: boolean; pl
   config.$schema ||= "https://opencode.ai/config.json";
   config.plugin = replaceOpenXmenPluginEntries(asArray(config.plugin), getPluginEntry());
   config.instructions = appendUnique(asArray(config.instructions), ...OPENCODE_INSTRUCTIONS);
+  config.default_agent ??= "cerebro";
   config.share ??= "disabled";
   config.permission ??= { edit: "ask", bash: "ask", webfetch: "ask" };
   const content = `${JSON.stringify(config, null, 2)}\n`;
