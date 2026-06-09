@@ -2,7 +2,10 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_MODEL_SLOTS } from "./runtime/index.js";
-import { resolveTarget, TARGET_IDS, type TargetID } from "./targets/index.js";
+import { installManagedAgentInstructions, installManagedRuntime } from "./cli/runtime.js";
+import { updateOpencodeConfig, warmOpenCodePluginCache } from "./cli/config.js";
+import { runOpenCodeDoctor } from "./cli/doctor.js";
+import { fileURLToPath } from "node:url";
 
 type InstallOptions = {
   dryRun: boolean;
@@ -10,7 +13,6 @@ type InstallOptions = {
   reset: boolean;
   skipDeps: boolean;
   target: string;
-  emitter: TargetID;
 };
 
 type JsonObject = { [key: string]: JsonValue };
@@ -22,6 +24,7 @@ function main() {
 
   if (!command) return install([]);
   if (command === "install") return install(args.slice(1));
+  if (command === "update") return update(args.slice(1));
   if (command === "doctor") return doctor(args.slice(1));
   if (command === "models") return models();
   if (command === "--help" || command === "-h") {
@@ -39,6 +42,7 @@ function printHelp() {
 
 Usage:
   open-xmen [install] [OPTIONS]
+  open-xmen update [--dir <path>] [--dry-run]
   open-xmen doctor [OPTIONS]
   open-xmen models
 
@@ -50,6 +54,10 @@ Install options:
   --no-deps       Skip OpenCode plugin cache warm-up
   -h, --help      Show this help message
 
+Update options:
+  --dir <path>    Project directory to update (default: current directory)
+  --dry-run       Print planned writes without changing files
+
 Doctor options:
   --dir <path>    Project directory to validate (default: current directory)
   --json          Print diagnostics as JSON
@@ -58,7 +66,7 @@ Doctor options:
 Examples:
   bunx open-xmen@latest install
   bunx open-xmen@latest install --dir /path/to/project --dry-run
-  bunx open-xmen@latest install --reset --no-deps
+  bunx open-xmen@latest update
   open-xmen doctor --json
 `);
 }
@@ -68,6 +76,13 @@ function printInstallHelp() {
 
 By default, existing runtime/template files are skipped. Use --reset or --force to refresh them.
 opencode.jsonc is updated atomically and an opencode.jsonc.bak backup is created when replacing an existing config.`);
+}
+
+function printUpdateHelp() {
+  console.log(`Usage: open-xmen update [--dir <path>] [--dry-run]
+
+Refreshes all managed runtime and template files to the current package version.
+This is the recommended way to upgrade after \`bunx open-xmen@latest\` fetches a new version.`);
 }
 
 function printDoctorHelp() {
@@ -83,8 +98,7 @@ function install(args: string[]) {
   const unknown = args.find((arg, index) => {
     if (!arg.startsWith("-")) return false;
     if (args[index - 1] === "--dir") return false;
-    if (args[index - 1] === "--target") return false;
-    return !["--dir", "--target", "--dry-run", "--force", "--reset", "--no-deps"].includes(arg);
+    return !["--dir", "--dry-run", "--force", "--reset", "--no-deps"].includes(arg);
   });
   if (unknown) {
     console.error(`Unknown install option: ${unknown}`);
@@ -92,17 +106,8 @@ function install(args: string[]) {
   }
 
   const targetArg = valueAfter(args, "--dir");
-  const emitterArg = valueAfter(args, "--target") || "opencode";
   if (args.includes("--dir") && !targetArg) {
     console.error("Missing value for --dir");
-    return 1;
-  }
-  if (args.includes("--target") && !valueAfter(args, "--target")) {
-    console.error("Missing value for --target");
-    return 1;
-  }
-  if (!TARGET_IDS.includes(emitterArg as TargetID)) {
-    console.error(`Unsupported target: ${emitterArg}`);
     return 1;
   }
 
@@ -112,28 +117,22 @@ function install(args: string[]) {
     reset: args.includes("--reset"),
     skipDeps: args.includes("--no-deps"),
     target: path.resolve(targetArg || process.cwd()),
-    emitter: emitterArg as TargetID,
   };
   const overwrite = options.force || options.reset;
   const planned: string[] = [];
-  const adapter = resolveTarget(options.emitter);
 
   console.log(`Open X-Men ${options.dryRun ? "dry run" : "install"}`);
   console.log(`Target: ${options.target}`);
-  console.log(`Emitter: ${options.emitter}`);
   if (overwrite) console.log("Mode: refresh existing managed files (--reset/--force)");
   else console.log("Mode: safe install (existing files are skipped)");
 
   if (!options.dryRun) mkdirSync(options.target, { recursive: true });
   else planned.push(`ensure directory ${options.target}`);
 
-  adapter.install({
-    targetDir: options.target,
-    dryRun: options.dryRun,
-    overwrite,
-    skipDeps: options.skipDeps,
-    planned,
-  });
+  installManagedRuntime(options.target, { dryRun: options.dryRun, overwrite, planned });
+  installManagedAgentInstructions(options.target, { dryRun: options.dryRun, overwrite, planned });
+  updateOpencodeConfig(options.target, { dryRun: options.dryRun, planned });
+  if (!options.dryRun && !options.skipDeps) warmOpenCodePluginCache(packageRoot());
 
   if (options.dryRun) {
     console.log("\nPlanned actions:");
@@ -142,11 +141,56 @@ function install(args: string[]) {
     return 0;
   }
 
-  if (options.skipDeps && options.emitter === "opencode") console.log("Skipped OpenCode plugin cache warm-up (--no-deps)");
+  if (options.skipDeps) console.log("Skipped OpenCode plugin cache warm-up (--no-deps)");
 
   console.log("open-xmen install: PASS");
   console.log(`Installed into ${options.target}`);
-  if (options.emitter === "opencode") console.log("Next: run `opencode .`, then use `/cerebro-index`, `/cerebro-plan`, or `/to-me-my-x-men`.");
+  console.log("Next: run `opencode .`, then use `/cerebro-index`, `/cerebro-plan`, or `/to-me-my-x-men`.");
+  return 0;
+}
+
+function update(args: string[]) {
+  if (args.includes("--help") || args.includes("-h")) {
+    printUpdateHelp();
+    return 0;
+  }
+
+  const unknown = args.find((arg, index) => {
+    if (!arg.startsWith("-")) return false;
+    if (args[index - 1] === "--dir") return false;
+    return !["--dir", "--dry-run"].includes(arg);
+  });
+  if (unknown) {
+    console.error(`Unknown update option: ${unknown}`);
+    return 1;
+  }
+
+  const targetArg = valueAfter(args, "--dir");
+  if (args.includes("--dir") && !targetArg) {
+    console.error("Missing value for --dir");
+    return 1;
+  }
+
+  const dryRun = args.includes("--dry-run");
+  const target = path.resolve(targetArg || process.cwd());
+  const planned: string[] = [];
+
+  console.log(`Open X-Men ${dryRun ? "update dry run" : "update"}`);
+  console.log(`Target: ${target}`);
+
+  installManagedRuntime(target, { dryRun, overwrite: true, planned });
+  installManagedAgentInstructions(target, { dryRun, overwrite: true, planned });
+  updateOpencodeConfig(target, { dryRun, planned });
+
+  if (dryRun) {
+    console.log("\nPlanned actions:");
+    for (const action of planned) console.log(`- ${action}`);
+    console.log("\nopen-xmen update: DRY RUN PASS");
+    return 0;
+  }
+
+  console.log("open-xmen update: PASS");
+  console.log(`Updated managed runtime files in ${target}`);
   return 0;
 }
 
@@ -157,12 +201,10 @@ function doctor(args: string[] = []) {
   }
   const json = args.includes("--json");
   const targetArg = valueAfter(args, "--dir");
-  const emitterArg = valueAfter(args, "--target") || "opencode";
   const unknown = args.find((arg, index) => {
     if (!arg.startsWith("-")) return false;
     if (args[index - 1] === "--dir") return false;
-    if (args[index - 1] === "--target") return false;
-    return !["--dir", "--target", "--json"].includes(arg);
+    return !["--dir", "--json"].includes(arg);
   });
   if (unknown) {
     if (json) console.log(JSON.stringify({ ok: false, error: `Unknown doctor option: ${unknown}` }, null, 2));
@@ -174,19 +216,9 @@ function doctor(args: string[] = []) {
     else console.error("Missing value for --dir");
     return 1;
   }
-  if (args.includes("--target") && !valueAfter(args, "--target")) {
-    if (json) console.log(JSON.stringify({ ok: false, error: "Missing value for --target" }, null, 2));
-    else console.error("Missing value for --target");
-    return 1;
-  }
-  if (!TARGET_IDS.includes(emitterArg as TargetID)) {
-    if (json) console.log(JSON.stringify({ ok: false, error: `Unsupported target: ${emitterArg}` }, null, 2));
-    else console.error(`Unsupported target: ${emitterArg}`);
-    return 1;
-  }
 
   const cwd = path.resolve(targetArg || process.cwd());
-  const result = resolveTarget(emitterArg as TargetID).doctor(cwd);
+  const result = runOpenCodeDoctor(cwd);
 
   if (json) {
     console.log(JSON.stringify(result, null, 2));
@@ -217,9 +249,18 @@ function models() {
   return 0;
 }
 
+function packageRoot() {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+}
+
 function valueAfter(args: string[], flag: string) {
   const index = args.indexOf(flag);
   return index === -1 ? undefined : args[index + 1];
 }
 
-process.exitCode = main();
+try {
+  process.exitCode = main();
+} catch (err) {
+  console.error(`open-xmen: ${err instanceof Error ? err.message : String(err)}`);
+  process.exitCode = 1;
+}

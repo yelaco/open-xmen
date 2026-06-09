@@ -1,6 +1,6 @@
 {
   "name": "open-xmen",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Cerebro/X-Men orchestration workflow for OpenCode.",
   "type": "module",
   "bin": {
@@ -18,9 +18,10 @@
     "README.md"
   ],
   "scripts": {
+    "generate-assets": "bun scripts/generate-assets.ts",
     "build": "tsc -p tsconfig.json",
     "doctor": "node dist/cli.js doctor",
-    "validate": "npm run build && node dist/cli.js doctor && npm run verify:release",
+    "validate": "npm run build && npm run verify:release",
     "prepare": "npm run build",
     "prepublishOnly": "npm run validate",
     "pack:check": "npm pack --dry-run",
@@ -31,6 +32,7 @@
     "zod": "^4.1.8"
   },
   "devDependencies": {
+    "@opencode-ai/sdk": "^1.16.2",
     "@types/node": "^22.13.9",
     "typescript": "^5.8.2"
   },

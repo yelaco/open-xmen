@@ -1,0 +1,46 @@
+import type { AgentConfig } from "@opencode-ai/sdk/v2";
+
+export const CEREBRO_RUNTIME_CONTRACT = `## Cerebro Runtime Contract
+
+- Runtime state lives in \`.cerebro/\`.
+- Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- Preserve command names and role names.
+- Do not read \`.env\`, secret, or credential files without explicit user authorization.
+- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.`;
+
+export type OpenCodePermissionLevel = "ask" | "allow" | "deny";
+
+export type OpenCodeThinkingVariant = "none" | "low" | "medium" | "high" | "xhigh";
+
+export interface OpenCodeMeta {
+  mode?: "primary" | "subagent";
+  steps?: number;
+  variant?: OpenCodeThinkingVariant;
+  permission?: {
+    edit?: OpenCodePermissionLevel;
+    bash?: OpenCodePermissionLevel;
+    webfetch?: OpenCodePermissionLevel;
+  };
+}
+
+export interface AgentDefinition {
+  name: string;
+  displayName?: string;
+  description?: string;
+  config: AgentConfig;
+  /** OpenCode-specific frontmatter metadata for markdown generation. */
+  opencode?: OpenCodeMeta;
+  /** Priority-ordered model entries for runtime fallback resolution. */
+  _modelArray?: Array<{ id: string; variant?: string }>;
+}
+
+/**
+ * Resolve agent prompt from base/custom/append inputs.
+ * If customPrompt is provided, it replaces the base entirely.
+ * Otherwise, customAppendPrompt is appended to the base.
+ */
+export function resolvePrompt(base: string, customPrompt?: string, customAppendPrompt?: string): string {
+  if (customPrompt) return customPrompt;
+  if (customAppendPrompt) return `${base}\n\n${customAppendPrompt}`;
+  return base;
+}

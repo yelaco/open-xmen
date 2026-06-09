@@ -1,8 +1,2 @@
-export const CEREBRO_COMMANDS = [
-  "/to-me-my-x-men",
-  "/cerebro-plan",
-  "/cerebro-start-work",
-  "/cerebro-index",
-  "/cerebro-doctor",
-  "/cerebro-reset",
-] as const;
+export { CEREBRO_COMMANDS, CEREBRO_COMMAND_DEFINITIONS, toOpenCodeCommandMarkdown } from "./definitions.js";
+export type { CerebroCommand, CommandDefinition } from "./definitions.js";

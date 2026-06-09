@@ -1,17 +1,17 @@
 import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
-import { appendFile, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import type { Part, Permission } from "@opencode-ai/sdk";
+import { appendFile, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES, DEFAULT_MODEL_SLOTS } from "./runtime/index.js";
-import { autoUpgradePackage } from "./hooks/auto-upgrade.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
 const RISKS = [...CEREBRO_RISKS] as const;
 const TASK_STATUSES = [...CEREBRO_TASK_STATUSES] as const;
-const CEREBRO_AGENTS_SET = new Set(CEREBRO_AGENTS);
 const SAFE_NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
-const SECRET_PATH_PATTERN = /(^|[/\\])\.env(\.|$|[/\\])|secret|credential|token|private[-_]?key/i;
+const SECRET_PATH_PATTERN = /(^|[/\\])\.env(\.|$|[/\\])|secret|credential|private[-_]?key/i;
 const MAX_PENDING_FILES = 500;
 const MAX_PENDING_FILE_BYTES = 64 * 1024;
 type Risk = (typeof RISKS)[number];
@@ -35,31 +35,12 @@ type TaskRecord = {
   verification: Array<{ at: string; result: string; command?: string; notes?: string }>;
 };
 
-type CommandTextPart = {
-  id: string;
-  sessionID: string;
-  messageID: string;
-  type: "text";
-  text: string;
-  synthetic?: boolean;
-};
-
-type PromptTextPart = {
-  type: "text";
-  text: string;
-};
-
-type ChildSessionCreateResult = {
-  data?: { id?: string } | null;
-  id?: string;
-};
-
 type ChildSessionClient = {
   session: {
     create(input: {
       body: { parentID?: string; title: string };
       query?: { directory: string };
-    }): Promise<ChildSessionCreateResult>;
+    }): Promise<{ data?: { id?: string } | null; id?: string }>;
     promptAsync(input: {
       path: { id: string };
       query?: { directory: string };
@@ -67,21 +48,10 @@ type ChildSessionClient = {
         agent: string;
         model?: { providerID: string; modelID: string };
         noReply: boolean;
-        parts: PromptTextPart[];
+        parts: Array<{ type: "text"; text: string }>;
       };
     }): Promise<unknown>;
   };
-};
-
-type ManifestWithMailboxDecisions = {
-  mailbox_decisions?: Array<{
-    at: string;
-    from: string;
-    to: string;
-    decision: string;
-    notes: string;
-  }>;
-  updated_at?: string;
 };
 
 function now() {
@@ -144,15 +114,11 @@ function parseModelID(model: string) {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function assertSafeName(value: string, label: string) {
   if (!SAFE_NAME_PATTERN.test(value)) throw new Error(`${label} must be a safe slug-like name`);
-}
-
-function assertSafeAgent(agent: string) {
-  if (!CEREBRO_AGENTS_SET.has(agent as (typeof CEREBRO_AGENTS)[number])) throw new Error(`Unsupported Cerebro agent: ${agent}`);
 }
 
 function readToolArgs(args: unknown) {
@@ -231,18 +197,58 @@ async function saveTasks(ctx: RuntimeContext, runId: string, tasks: TaskRecord[]
 
 export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => {
   const ctx = { worktree, directory };
-  void autoUpgradePackage(ctx);
+  let sessionCheckDone = false;
 
   return {
-    async event({ event }) {
-      if (!event || typeof event !== "object") return;
-      const eventType = "type" in event ? String(event.type) : "unknown";
-      if (!eventType.startsWith("session.") && !eventType.startsWith("command.") && !eventType.startsWith("todo.")) return;
-      await appendJsonl(safeRuntimePath(ctx, "team-runs/events.jsonl"), {
-        logged_at: now(),
-        event: eventType,
-        payload: event,
-      });
+    async "permission.ask"(input: Permission, output) {
+      const pattern = Array.isArray(input.pattern) ? input.pattern[0] : (input.pattern ?? "");
+      if (pattern && isSecretPath(pattern)) {
+        output.status = "deny";
+        return;
+      }
+      if (pattern && (pattern.startsWith(".cerebro/") || pattern.includes("/.cerebro/"))) {
+        output.status = "allow";
+      }
+    },
+
+    async "shell.env"(_input, output) {
+      const slots = modelSlots();
+      output.env.CEREBRO_MODEL_FRONTIER = slots.frontier;
+      output.env.CEREBRO_MODEL_STRONG = slots.strong;
+      output.env.CEREBRO_MODEL_CODING = slots.coding;
+      output.env.CEREBRO_MODEL_SPARK = slots.spark;
+      output.env.CEREBRO_MODEL_FAST = slots.fast;
+      output.env.CEREBRO_MODEL_IMAGE = slots.image;
+    },
+
+    async "experimental.chat.system.transform"(_input, output) {
+      output.system.push(
+        "Cerebro OpenCode runtime is active. Runtime state lives under `.cerebro/`. Use the cerebro_* custom tools for run coordination, task tracking, mailbox, checkpoints, and pending-todo verification."
+      );
+      if (!sessionCheckDone) {
+        sessionCheckDone = true;
+        try {
+          const pendingRoot = safeRuntimePath(ctx, "pending-todos");
+          const legacyPendingRoot = safeRuntimePath(ctx, ".pending-todos");
+          const [current, legacy] = await Promise.all([
+            scanPendingTodos(pendingRoot),
+            scanPendingTodos(legacyPendingRoot),
+          ]);
+          const items = [...current, ...legacy];
+          if (items.length > 0) {
+            output.system.push(
+              `CEREBRO SESSION START — ${items.length} pending todo item(s) found from a previous session:\n` +
+              items.map((i) => `- ${i.line} (${i.file})`).join("\n") +
+              "\n\nBefore doing anything else, greet the user briefly and ask: " +
+              '"Continue previous work? [Y/n]" — default is YES (continue). ' +
+              "If they say yes or press enter, summarize the pending work and resume. " +
+              "If they say no, call cerebro_clear_pending to discard the todos and start fresh."
+            );
+          }
+        } catch {
+          // non-fatal: missing .cerebro dir or scan error at session start
+        }
+      }
     },
 
     async "command.execute.before"(input, output) {
@@ -259,13 +265,13 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
           "Runtime root: `.cerebro/`. Preserve command names and role names.",
         ].join("\n"),
         synthetic: true,
-      } satisfies CommandTextPart);
+      } satisfies Part);
     },
 
     async "tool.execute.before"(_input, output) {
       const args = readToolArgs(output.args);
-      const candidate = String(args.filePath || args.path || args.command || "");
-      if (isSecretPath(candidate)) {
+      const filePath = String(args.filePath || args.path || "");
+      if (filePath && isSecretPath(filePath)) {
         throw new Error("Cerebro safety policy blocks reading or touching env/secret/credential paths without explicit user authorization.");
       }
     },
@@ -278,7 +284,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
 
     tool: {
       cerebro_model_slots: tool({
-        description: "Return the configured Cerebro OpenAI model slots for role routing.",
+        description: "Return the configured Cerebro model slots for role routing.",
         args: {},
         async execute() {
           return JSON.stringify(modelSlots(), null, 2);
@@ -286,18 +292,19 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
       }),
 
       cerebro_run_start: tool({
-        description: "Create or initialize a Cerebro run manifest and boulder checkpoint under .cerebro.",
+        description: "Create a Cerebro run manifest and boulder checkpoint under .cerebro/team-runs/.",
         args: {
           command: tool.schema.enum(Array.from(COMMANDS) as [string, ...string[]]).describe("Cerebro command name"),
           objective: tool.schema.string().min(1).describe("User objective for this run"),
           risk_level: tool.schema.enum(RISKS).describe("Risk level"),
-          team_name: tool.schema.string().optional().describe("Optional stable team/session name"),
+          team_name: tool.schema.string().optional().describe("Stable team/session name (defaults to a slug of command + objective)"),
         },
         async execute(args) {
           const timestamp = now();
           const runId = `${timestamp.slice(0, 10).replace(/-/g, "")}-${timestamp.slice(11, 19).replace(/:/g, "")}-${slug(args.objective)}`;
           const teamName = args.team_name || slug(`${args.command}-${args.objective}`);
-          const manifest = {
+
+          await writeJson(manifestFile(ctx, runId), {
             version: 1,
             run_id: runId,
             command: args.command,
@@ -313,13 +320,8 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
             mailbox_decisions: [],
             approvals: [],
             verification: [],
-            cleanup: {
-              team_stopped: false,
-              pending_todos_clear: false,
-              notes: "OpenCode-managed Cerebro run",
-            },
-          };
-          await writeJson(manifestFile(ctx, runId), manifest);
+            cleanup: { team_stopped: false, pending_todos_clear: false, notes: "" },
+          });
           await saveTasks(ctx, runId, []);
 
           if (["/to-me-my-x-men", "/cerebro-start-work"].includes(args.command)) {
@@ -343,7 +345,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
       }),
 
       cerebro_task_create: tool({
-        description: "Create a task record for an OpenCode-managed Cerebro run.",
+        description: "Create a task record for a Cerebro run.",
         args: {
           run_id: tool.schema.string().min(1),
           subject: tool.schema.string().min(1),
@@ -353,7 +355,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
         },
         async execute(args) {
           const tasks = await loadTasks(ctx, args.run_id);
-          const id = `task-${String(tasks.length + 1).padStart(3, "0")}`;
+          const id = `task-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
           const record: TaskRecord = {
             id,
             subject: args.subject,
@@ -373,7 +375,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
       }),
 
       cerebro_task_list: tool({
-        description: "List task records for an OpenCode-managed Cerebro run.",
+        description: "List task records for a Cerebro run.",
         args: { run_id: tool.schema.string().min(1) },
         async execute(args) {
           return JSON.stringify(await loadTasks(ctx, args.run_id), null, 2);
@@ -411,7 +413,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
       }),
 
       cerebro_mailbox_send: tool({
-        description: "Append a mailbox message for a Cerebro run and optionally record decisions in the manifest.",
+        description: "Append a mailbox message for a Cerebro run.",
         args: {
           run_id: tool.schema.string().min(1),
           from: tool.schema.string().min(1),
@@ -423,14 +425,6 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
         async execute(args) {
           const record = { at: now(), ...args };
           await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), record);
-          if (args.decision) {
-            const file = manifestFile(ctx, args.run_id);
-            const manifest = await readJson<ManifestWithMailboxDecisions>(file, {});
-            manifest.mailbox_decisions ||= [];
-            manifest.mailbox_decisions.push({ at: record.at, from: args.from, to: args.to, decision: args.decision, notes: args.body });
-            manifest.updated_at = now();
-            await writeJson(file, manifest);
-          }
           return JSON.stringify(record, null, 2);
         },
       }),
@@ -448,7 +442,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
           const lines = (await readFile(file, "utf8")).split("\n");
           const records = lines
             .filter(Boolean)
-            .map((line) => JSON.parse(line))
+            .flatMap((line) => { try { return [JSON.parse(line)]; } catch { return []; } })
             .filter((record) => !args.to || record.to === args.to)
             .slice(-(args.limit || 50));
           return JSON.stringify(records, null, 2);
@@ -456,19 +450,19 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
       }),
 
       cerebro_dispatch_agent: tool({
-        description: "Dispatch an OpenCode child session/subagent for Cerebro work and record the dispatch intent. Returns child session metadata when the SDK supports it.",
+        description: "Dispatch an OpenCode child session for a Cerebro agent and record the dispatch in the mailbox. Returns child session metadata when the SDK supports it, otherwise returns a fallback instruction.",
         args: {
           run_id: tool.schema.string().min(1),
-          agent: tool.schema.enum(CEREBRO_AGENTS).describe("OpenCode/Cerebro agent name, e.g. nightcrawler, wolverine, professor-x"),
+          agent: tool.schema.enum(CEREBRO_AGENTS).describe("Cerebro agent name, e.g. wolverine, nightcrawler, professor-x"),
           description: tool.schema.string().min(1),
           prompt: tool.schema.string().min(1),
-          model_slot: tool.schema.enum(["frontier", "strong", "coding", "spark", "fast", "image"]).optional().describe("Optional Cerebro model slot override for this dispatch"),
+          model_slot: tool.schema.enum(["frontier", "strong", "coding", "spark", "fast", "image"]).optional().describe("Cerebro model slot override for this dispatch"),
           no_reply: tool.schema.boolean().optional(),
         },
         async execute(args, toolContext) {
-          assertSafeAgent(args.agent);
-          const dispatchRecord = { at: now(), type: "dispatch", from: "cerebro", to: args.agent, description: args.description };
-          await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), dispatchRecord);
+          await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+            at: now(), type: "dispatch", from: "cerebro", to: args.agent, description: args.description,
+          });
           try {
             if (!hasChildSessionClient(client)) throw new Error("OpenCode SDK client does not expose child session create/promptAsync methods");
             const created = await client.session.create({
@@ -502,7 +496,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
       }),
 
       cerebro_checkpoint: tool({
-        description: "Write a durable Cerebro checkpoint for compaction/resume.",
+        description: "Write a durable Cerebro checkpoint to survive session compaction.",
         args: {
           run_id: tool.schema.string().min(1),
           summary: tool.schema.string().min(1),
@@ -516,8 +510,31 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
         },
       }),
 
+      cerebro_clear_pending: tool({
+        description: "Discard pending todos for a specific team or all teams. Use when the user chooses to reset rather than resume previous work.",
+        args: {
+          team_name: tool.schema.string().optional().describe("Team name to clear; omit to clear all pending todos"),
+        },
+        async execute(args) {
+          const pendingRoot = safeRuntimePath(ctx, "pending-todos");
+          const teamName = args.team_name?.trim();
+          if (teamName) assertSafeName(teamName, "team_name");
+          const items = await scanPendingTodos(pendingRoot, teamName);
+          if (items.length === 0) return JSON.stringify({ cleared: 0, message: "No pending todos to clear." });
+          if (teamName) {
+            const teamDir = path.join(pendingRoot, teamName);
+            if (existsSync(teamDir)) await rm(teamDir, { recursive: true, force: true });
+          } else {
+            for (const entry of await readdir(pendingRoot)) {
+              await rm(path.join(pendingRoot, entry), { recursive: true, force: true });
+            }
+          }
+          return JSON.stringify({ cleared: items.length, message: `Cleared ${items.length} pending todo item(s). Starting fresh.` });
+        },
+      }),
+
       cerebro_verify_pending: tool({
-        description: "Scan .cerebro pending todo files and report whether final response is allowed.",
+        description: "Scan .cerebro/pending-todos and report CLEAR or BLOCKED before final response.",
         args: { team_name: tool.schema.string().optional() },
         async execute(args) {
           const pendingRoot = safeRuntimePath(ctx, "pending-todos");

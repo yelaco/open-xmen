@@ -19,15 +19,11 @@ export function installManagedRuntime(target: string, opts: ManagedWriteOptions)
 
   for (const dir of ["plans", "notepads", "team-runs", "pending-todos"]) {
     const targetDir = path.join(target, ".cerebro", dir);
-    const gitkeep = path.join(targetDir, ".gitkeep");
-    if (opts.dryRun) {
-      opts.planned.push(`ensure directory ${targetDir}`);
-      if (!existsSync(gitkeep)) opts.planned.push(`create ${gitkeep}`);
-      continue;
-    }
-    mkdirSync(targetDir, { recursive: true });
-    if (!existsSync(gitkeep)) writeFileSync(gitkeep, "", "utf8");
+    if (opts.dryRun) opts.planned.push(`ensure directory ${targetDir}`);
+    else mkdirSync(targetDir, { recursive: true });
   }
+
+  appendGitignoreEntry(target, ".cerebro/", opts);
 }
 
 export function installManagedAgentInstructions(target: string, opts: ManagedWriteOptions) {
@@ -58,8 +54,39 @@ export function installManagedAgentInstructions(target: string, opts: ManagedWri
     return;
   }
 
+  if (start !== -1 || end !== -1) {
+    const cleaned = current
+      .split(OPEN_XMEN_AGENT_BLOCK_START).join("")
+      .split(OPEN_XMEN_AGENT_BLOCK_END).join("");
+    if (opts.dryRun) opts.planned.push(`repair corrupt Open X-Men AGENTS.md block ${destination}`);
+    else writeFileSync(destination, `${cleaned.trimEnd()}\n\n${block}\n`, "utf8");
+    return;
+  }
+
   if (opts.dryRun) opts.planned.push(`append Open X-Men AGENTS.md block ${destination}`);
   else writeFileSync(destination, `${current.trimEnd()}\n\n${block}\n`, "utf8");
+}
+
+function appendGitignoreEntry(target: string, entry: string, opts: ManagedWriteOptions) {
+  const destination = path.join(target, ".gitignore");
+  const normalized = entry.endsWith("\n") ? entry : `${entry}\n`;
+
+  if (existsSync(destination)) {
+    const current = readFileSync(destination, "utf8");
+    const lines = current.split("\n");
+    if (lines.some((line) => line.trim() === entry.trim())) return;
+    if (opts.dryRun) {
+      opts.planned.push(`append ${entry.trim()} to ${destination}`);
+      return;
+    }
+    writeFileSync(destination, `${current.trimEnd()}\n${normalized}`, "utf8");
+  } else {
+    if (opts.dryRun) {
+      opts.planned.push(`create ${destination} with ${entry.trim()}`);
+      return;
+    }
+    writeFileSync(destination, normalized, "utf8");
+  }
 }
 
 function requiredRuntimeAsset(assetPath: string) {
