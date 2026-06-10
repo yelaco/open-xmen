@@ -31,7 +31,7 @@ export function runOpenCodeDoctor(cwd: string): DoctorResult {
   const errors: string[] = [];
   const exists = (file: string) => existsSync(path.join(cwd, file));
   const read = (file: string) => readFileSync(path.join(cwd, file), "utf8");
-  const hasRuntimeFiles = exists(".opencode") || exists(".cerebro");
+  const hasRuntimeFiles = hasManagedRuntimeFiles(cwd);
   const resolvedConfig = resolvedOpenCodeConfig(cwd);
   const localHasPlugin = opencodeConfigHasOpenXmenPlugin(cwd);
 
@@ -43,12 +43,14 @@ export function runOpenCodeDoctor(cwd: string): DoctorResult {
     if (!isRecord(opencodeConfig)) {
       errors.push("opencode.jsonc should contain a JSON object");
     } else {
+      if (localHasPlugin && opencodeConfig.default_agent !== "cerebro") {
+        errors.push("project opencode.jsonc default_agent should be cerebro");
+      }
       if (hasRuntimeFiles) {
         const instructions = Array.isArray(opencodeConfig.instructions) ? opencodeConfig.instructions : [];
         for (const instruction of ["AGENTS.md", ".cerebro/cerebro-identity.md", ".cerebro/opencode/model-routing.md"]) {
           if (!instructions.includes(instruction)) errors.push(`opencode.jsonc instructions missing ${instruction}`);
         }
-        if (opencodeConfig.default_agent !== "cerebro") errors.push("opencode.jsonc default_agent should be cerebro");
       }
     }
   } else if (hasRuntimeFiles) {
@@ -108,7 +110,7 @@ export function runOpenCodeDoctor(cwd: string): DoctorResult {
     }
   }
 
-  if (exists("README.md")) {
+  if (isOpenXmenPackageRoot(cwd) && exists("README.md")) {
     const readme = read("README.md");
     for (const command of CEREBRO_COMMANDS) {
       if (!readme.includes(command)) errors.push(`README.md missing command ${command}`);
@@ -140,10 +142,31 @@ export function runOpenCodeDoctor(cwd: string): DoctorResult {
   return { ok: errors.length === 0, cwd, errors, agents: fileAgents || resolvedAgents, commands: fileCommands || resolvedCommands, mode: hasRuntimeFiles ? "runtime-files" : "plugin" };
 }
 
+function hasManagedRuntimeFiles(cwd: string) {
+  return [
+    ".opencode/agents/cerebro.md",
+    ".opencode/commands/cerebro-plan.md",
+    ".cerebro/cerebro-identity.md",
+    ".cerebro/opencode/model-routing.md",
+    ".cerebro/templates/plan.md",
+  ].some((file) => existsSync(path.join(cwd, file)));
+}
+
 function resolvedOpenCodeConfig(cwd: string) {
   const opencode = spawnSync("opencode", ["debug", "config"], { cwd, encoding: "utf8" });
   if (opencode.status !== 0 || !opencode.stdout.trim()) return undefined;
   return parseJsonc(opencode.stdout);
+}
+
+function isOpenXmenPackageRoot(cwd: string) {
+  const packageJson = path.join(cwd, "package.json");
+  if (!existsSync(packageJson)) return false;
+  try {
+    const parsed = JSON.parse(readFileSync(packageJson, "utf8"));
+    return isRecord(parsed) && parsed.name === "open-xmen";
+  } catch {
+    return false;
+  }
 }
 
 

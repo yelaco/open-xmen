@@ -159,6 +159,7 @@ function install(args: string[]) {
   updateOpencodeConfig(options.target, {
     dryRun: options.dryRun,
     planned,
+    defaultAgent: options.global ? undefined : "cerebro",
     includeRuntimeInstructions: options.runtimeFiles,
     setCerebroDefaults: options.runtimeFiles,
   });
@@ -210,7 +211,7 @@ function update(args: string[]) {
 
   installManagedRuntime(target, { dryRun, overwrite: true, planned });
   installManagedAgentInstructions(target, { dryRun, overwrite: true, planned });
-  updateOpencodeConfig(target, { dryRun, planned, includeRuntimeInstructions: true, setCerebroDefaults: true });
+  updateOpencodeConfig(target, { dryRun, planned, defaultAgent: "cerebro", includeRuntimeInstructions: true, setCerebroDefaults: true });
 
   if (dryRun) {
     console.log("\nPlanned actions:");

@@ -85,7 +85,7 @@ bunx open-xmen@latest install --force
 bunx open-xmen@latest install --no-deps
 ```
 
-Use `--dir` or `--with-runtime-files` only if you want project-local files written into a project.
+Use `--dir` or `--with-runtime-files` only if you want project-local files written into a project. Project-local installs set `default_agent` to `cerebro` in the generated `opencode.jsonc`.
 
 For local development of this package:
 
@@ -122,6 +122,7 @@ open-xmen models
 - Omitting the subcommand defaults to `install`, matching `bunx open-xmen@latest install` behavior.
 - `--dry-run` prints planned writes and does not mutate the target config or project.
 - `--global` installs into the OpenCode user config; it is the default when `--dir` is omitted and `--with-runtime-files` is not set. The user config path honors `OPENCODE_CONFIG_DIR` first, then `XDG_CONFIG_HOME`, then `~/.config/opencode`.
+- `--dir` writes a project-local `opencode.jsonc` and makes `cerebro` the default agent for that project.
 - `--with-runtime-files` writes the legacy managed runtime files; without it, no `.opencode/` or `.cerebro/` files are created.
 - `--reset` / `--force` refresh existing managed files when `--with-runtime-files` is used.
 - `opencode.jsonc` writes are atomic via `opencode.jsonc.tmp` and create `opencode.jsonc.bak` before replacing an existing config.
@@ -135,7 +136,6 @@ open-xmen models
 | `/cerebro-plan [task]` | Interview-first planning with Professor X, Beast, and Emma Frost validation. |
 | `/cerebro-start-work` | Execute or resume the latest Cerebro plan through Cyclops coordination. |
 | `/to-me-my-x-men [task]` | Autonomous full-team mode with Legion + Cypher intent consult and final Legion acceptance. |
-| `/cerebro-doctor` | Validate runtime health and command/model/runtime drift. |
 
 ---
 
@@ -190,10 +190,10 @@ npm run verify:release
 
 `npm run verify:release` builds the package, packs it with `npm pack --json --ignore-scripts`, checks the packaged runtime file set exactly, rejects forbidden paths such as dev-only plugin bridges or secret-like files, installs the tarball into a clean temp package, smoke-tests user-config install, project plugin-only install, runtime-file install, command/agent resolution through `opencode debug config`, plugin command/agent registration, and `open-xmen doctor`.
 
-`/cerebro-doctor` runs the same class of checks from inside OpenCode, including model-slot consistency and runtime drift.
+Use `bunx open-xmen@latest doctor [--dir <path>]` for install/runtime diagnostics outside OpenCode.
 
 ## Auto-Upgrades
 
-When the `open-xmen` plugin loads, it checks the npm registry for the latest package version. If a newer package is available and the plugin is running from a package-managed `node_modules/open-xmen` install, it best-effort updates that package and re-runs `open-xmen install --reset --no-deps` for the current project. Results are written to `.cerebro/auto-upgrade.json`; registry or install failures never block OpenCode startup.
+When the `open-xmen` plugin sees the first top-level OpenCode session, it checks the npm registry for the latest package version. If a newer package is available and the plugin is running from a package-managed `node_modules/open-xmen` install, it best-effort refreshes that OpenCode package workspace (`bun.lock` and stale `node_modules/open-xmen` included) and shows a toast. Restart OpenCode to load the updated plugin code. This does not write `.opencode/` or `.cerebro/` files into your project.
 
 Set `OPEN_XMEN_SKIP_AUTO_UPGRADE=1` or `OPEN_XMEN_AUTO_UPGRADE=0` to disable this behavior.

@@ -45,7 +45,6 @@ flowchart TB
 | `/cerebro-index` | Build or refresh repository context. |
 | `/cerebro-plan [task]` | Interview-first planning with Professor X. |
 | `/cerebro-start-work` | Execute or resume the latest Cerebro plan. |
-| `/cerebro-doctor` | Validate command names, model routing, OpenCode agents/commands, plugin bridge, schemas, and runtime health. |
 
 ## State Files
 

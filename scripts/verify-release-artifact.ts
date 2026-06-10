@@ -38,7 +38,7 @@ const requiredModelSlots = [
   ['fast', 'openai/gpt-5.4-mini-fast', 'CEREBRO_MODEL_FAST'],
   ['image', 'openai/gpt-image-2', 'CEREBRO_MODEL_IMAGE'],
 ];
-const expectedResolvedCommands = ['cerebro-doctor', 'cerebro-index', 'cerebro-plan', 'cerebro-start-work', 'to-me-my-x-men'];
+const expectedResolvedCommands = ['cerebro-index', 'cerebro-plan', 'cerebro-start-work', 'to-me-my-x-men'];
 const expectedResolvedAgents = [
   'cerebro',
   'legion',
@@ -192,6 +192,7 @@ function verifyFreshInstall(tarballPath: string) {
     if (!isRecord(opencodeConfig) || !Array.isArray(opencodeConfig.plugin) || !opencodeConfig.plugin.includes(expectedPackagePluginEntry)) {
       fail(`Installed opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
     }
+    if (opencodeConfig.default_agent !== 'cerebro') fail('Project-local install should set default_agent to cerebro');
     if (existsSync(path.join(projectDir, '.opencode'))) fail('Plugin-only install unexpectedly wrote .opencode/');
     if (existsSync(path.join(projectDir, '.cerebro'))) fail('Plugin-only install unexpectedly wrote .cerebro/');
     if (existsSync(path.join(projectDir, 'AGENTS.md'))) fail('Plugin-only install unexpectedly wrote AGENTS.md');
@@ -210,6 +211,7 @@ function verifyFreshInstall(tarballPath: string) {
     if (!isRecord(runtimeOpencodeConfig) || !Array.isArray(runtimeOpencodeConfig.plugin) || !runtimeOpencodeConfig.plugin.includes(expectedPackagePluginEntry)) {
       fail(`Runtime-files opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
     }
+    if (runtimeOpencodeConfig.default_agent !== 'cerebro') fail('Runtime-files install should set default_agent to cerebro');
 
     for (const installedFile of runtimeAssetPaths()) {
       if (!existsSync(path.join(runtimeProjectDir, installedFile))) {
@@ -242,7 +244,7 @@ function verifyFreshInstall(tarballPath: string) {
       await hooks.config?.(config);
       const commandNames = Object.keys(config.command ?? {}).sort();
       const agentNames = Object.keys(config.agent ?? {}).sort();
-      if (commandNames.length !== 5) throw new Error(\`Expected 5 commands, got \${commandNames.length}\`);
+      if (commandNames.length !== 4) throw new Error(\`Expected 4 commands, got \${commandNames.length}\`);
       if (!commandNames.includes('cerebro-plan') || !commandNames.includes('to-me-my-x-men')) throw new Error('Missing preserved command registrations');
       if (agentNames.length !== 13) throw new Error(\`Expected 13 agents, got \${agentNames.length}\`);
       if (!config.agent?.cerebro) throw new Error('Missing cerebro agent registration');
@@ -279,6 +281,7 @@ function verifyFreshInstall(tarballPath: string) {
     if (!isRecord(globalConfig) || !Array.isArray(globalConfig.plugin) || !globalConfig.plugin.includes(expectedPackagePluginEntry)) {
       fail(`Global opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
     }
+    if ('default_agent' in globalConfig) fail('Global install should not force default_agent');
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

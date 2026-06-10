@@ -24,6 +24,7 @@ import {
 import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
 import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, modelSlots } from "./config/models.js";
+import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent } from "./auto-update.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
 const RISKS = [...CEREBRO_RISKS] as const;
@@ -325,9 +326,11 @@ async function saveTasks(ctx: RuntimeContext, runId: string, tasks: TaskRecord[]
   await writeJson(taskFile(ctx, runId), tasks);
 }
 
-export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => {
+export const CerebroPlugin: Plugin = async (input) => {
+  const { worktree, directory, client } = input;
   const ctx = { worktree, directory };
   let sessionCheckDone = false;
+  let autoUpdateScheduled = false;
 
   // Serialises load→mutate→save cycles per run_id to prevent concurrent writes clobbering each other.
   const taskLocks = new Map<string, Promise<unknown>>();
@@ -366,6 +369,12 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
   }
 
   return {
+    async event({ event }) {
+      if (autoUpdateScheduled || !shouldRunAutoUpdateForEvent(event)) return;
+      autoUpdateScheduled = true;
+      scheduleOpenXmenAutoUpdate(input);
+    },
+
     async config(input) {
       registerCerebroConfig(input as OpenCodeConfig);
     },

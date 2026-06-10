@@ -12,6 +12,7 @@ type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 export type UpdateOpenCodeConfigOptions = {
   dryRun: boolean;
   planned: string[];
+  defaultAgent?: string;
   includeRuntimeInstructions?: boolean;
   setCerebroDefaults?: boolean;
 };
@@ -36,6 +37,9 @@ export function updateOpencodeConfig(target: string, opts: UpdateOpenCodeConfigO
   const config: JsonObject = isRecord(parsed) ? parsed : {};
   config.$schema ||= "https://opencode.ai/config.json";
   config.plugin = replaceOpenXmenPluginEntries(asArray(config.plugin), getPluginEntry());
+  if (opts.defaultAgent) {
+    config.default_agent ||= opts.defaultAgent;
+  }
   if (opts.includeRuntimeInstructions) {
     config.instructions = appendUnique(asArray(config.instructions), ...OPENCODE_INSTRUCTIONS);
   }
@@ -64,18 +68,31 @@ export function warmOpenCodePluginCache(packageRoot: string) {
   const cacheRoot = process.env.XDG_CACHE_HOME || path.join(home, ".cache");
   const cacheDir = path.join(cacheRoot, "opencode", "packages", `${PACKAGE_NAME}@${PACKAGE_CACHE_TAG}`);
   mkdirSync(cacheDir, { recursive: true });
-  writeFileSync(path.join(cacheDir, "package.json"), `${JSON.stringify({
-    name: `${PACKAGE_NAME}-cache`,
-    private: true,
-    dependencies: { [PACKAGE_NAME]: PACKAGE_CACHE_TAG },
-  }, null, 2)}\n`, "utf8");
   if (process.env.OPEN_XMEN_SEED_OPENCODE_CACHE === "1" && seedOpenCodePluginCache(cacheDir, packageRoot)) {
     console.log(`OpenCode plugin cache warmed: ${cacheDir}`);
     return;
   }
-  const bun = spawnSync("bun", ["install", "--ignore-scripts"], { cwd: cacheDir, stdio: "inherit" });
-  if (bun.status !== 0) console.warn("open-xmen install: skipped OpenCode plugin cache warm-up; bun install failed");
-  else console.log(`OpenCode plugin cache warmed: ${cacheDir}`);
+  if (installOpenXmenPackageWorkspace(cacheDir, { forceRefresh: true, stdio: "inherit" })) {
+    console.log(`OpenCode plugin cache warmed: ${cacheDir}`);
+  } else {
+    console.warn("open-xmen install: skipped OpenCode plugin cache warm-up; bun install failed");
+  }
+}
+
+export function installOpenXmenPackageWorkspace(workspaceDir: string, opts: { forceRefresh?: boolean; stdio?: "inherit" | "pipe" } = {}) {
+  mkdirSync(workspaceDir, { recursive: true });
+  writeFileSync(path.join(workspaceDir, "package.json"), `${JSON.stringify({
+    name: `${PACKAGE_NAME}-cache`,
+    private: true,
+    dependencies: { [PACKAGE_NAME]: PACKAGE_CACHE_TAG },
+  }, null, 2)}\n`, "utf8");
+  if (opts.forceRefresh) {
+    rmSync(path.join(workspaceDir, "bun.lock"), { force: true });
+    rmSync(path.join(workspaceDir, "bun.lockb"), { force: true });
+    rmSync(path.join(workspaceDir, "node_modules", PACKAGE_NAME), { recursive: true, force: true });
+  }
+  const bun = spawnSync("bun", ["install", "--ignore-scripts"], { cwd: workspaceDir, encoding: "utf8", stdio: opts.stdio ?? "inherit" });
+  return bun.status === 0;
 }
 
 export function opencodeConfigHasOpenXmenPlugin(cwd = process.cwd()) {

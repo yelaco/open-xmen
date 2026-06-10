@@ -18,7 +18,6 @@ Legacy `.claude/` files may exist as migration source or compatibility material,
 /cerebro-index
 /cerebro-plan redesign the authentication flow
 /cerebro-start-work
-/cerebro-doctor
 ```
 
 ## Working Modes
@@ -30,7 +29,6 @@ Legacy `.claude/` files may exist as migration source or compatibility material,
 | Autonomous | `/to-me-my-x-men [task]` | The task is clear and should be executed end to end. |
 | Planning | `/cerebro-plan [task]` | Requirements are complex, ambiguous, high-impact, or need approval. |
 | Execution | `/cerebro-start-work` | A plan exists and should be executed or resumed. |
-| Doctor | `/cerebro-doctor` | Validate workflow health and catch command/model/runtime drift. |
 
 Package updates are npm-managed. Run `bunx open-xmen@latest update` to refresh managed runtime files.
 
