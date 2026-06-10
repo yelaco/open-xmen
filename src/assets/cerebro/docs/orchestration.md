@@ -33,10 +33,13 @@ Cyclops receives the plan+task list and owns all execution:
 
 1. Routes each task by `Category` to the correct worker chain.
 2. Respects `depends_on` — never dispatches a task whose dependencies are not yet done.
-3. Uses `cerebro_agent_task` for result-required worker calls; uses `cerebro_dispatch_agent` plus `cerebro_collect_result` only for async work.
-4. Tracks todos under `.cerebro/pending-todos/{run_id}/cyclops/`.
-5. After each TASK_RESULT, runs verification commands from the plan. Retries (max 2) on failure with exact output routed back to the worker.
-6. Returns `EXECUTION_COMPLETE` or `EXECUTION_BLOCKED`.
+3. Fans out independent dependency-frontier tasks in parallel with `cerebro_dispatch_batch` when they have no shared files/state and no sequencing requirement.
+4. Uses `cerebro_agent_task` for single result-required calls; uses `cerebro_dispatch_agent`/`cerebro_dispatch_batch` plus `cerebro_collect_result(poll: true)`/`cerebro_collect_batch_results` for async work.
+5. Tracks todos under `.cerebro/pending-todos/{run_id}/cyclops/`.
+6. After each TASK_RESULT, immediately runs verification commands from the plan/task ledger before marking the task done or dispatching dependents. Retries (max 2) on failure with exact output routed back to the worker.
+7. Emits visible progress milestones and relies on collect-tool heartbeats for long waits, so users can see that work is still active.
+8. Records blockers, failed verification, weak evidence, runtime gaps, and UX problems to `.cerebro/team-runs/{run-id}.problems.jsonl`.
+9. Returns `EXECUTION_COMPLETE` or `EXECUTION_BLOCKED`.
 
 **Category routing table:**
 
@@ -54,7 +57,7 @@ Workers own their domain and return `TASK_RESULT` with files changed, tests run,
 
 ## Verification Standard
 
-Worker self-report is not enough. Cyclops collects child-session output into the mailbox/task ledger, runs the plan's verification commands after each TASK_RESULT, and routes failures back to the responsible worker with exact output. Final synthesis happens only after `cerebro_verify_pending` confirms task-scoped todos are clear or explicitly blocked.
+Worker self-report is not enough. Cyclops collects child-session output into the mailbox/task ledger, runs the plan's verification commands after each TASK_RESULT as a post-delegation gate, records PASS/FAIL on the task, and routes failures back to the responsible worker with exact output. Final synthesis happens only after `cerebro_verify_pending` confirms task-scoped todos are clear or explicitly blocked.
 
 ## Multi-Model Resilience
 

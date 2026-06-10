@@ -8,7 +8,7 @@ This runtime uses X-Men names for OpenCode specialist prompts. The names are par
 | Professor X | Strategic planner and interviewer | `.cerebro/plans/` only |
 | Beast | Gap analyst and plan critic | Read-only |
 | Emma Frost | Plan validator | Read-only |
-| Cyclops | Execution layer conductor and verifier | Runtime ledgers, task routing, bash verification; source edits only by delegated workers |
+| Cyclops | Execution layer conductor and verifier | Runtime ledgers, dependency-frontier fan-out, task routing, bash verification; source edits only by delegated workers |
 | Wolverine | Sole implementation specialist — backend and frontend logic, structure, tests | Codebase, excluding `.cerebro/plans/` |
 | Jean Grey | Design strategist | `.cerebro/notepads/design/` only |
 | Storm | Visual engineering — CSS, animations, tokens, responsive, accessibility | Style and component files |

@@ -40,7 +40,7 @@ const AGENT_DESCRIPTIONS: Record<string, string> = {
 - **Don't delegate when:** Component structure or behavior work (use Wolverine) • No visual surface involved`,
 
   cyclops: `@cyclops
-- Role: Execution layer conductor; receives plan+task list from Cerebro and owns all execution: routes tasks by category, dispatches workers, tracks todos, verifies results, handles retries, escalates blockers
+- Role: Execution layer conductor; receives plan+task list from Cerebro and owns all execution: routes tasks by category, fans out independent work in parallel, dispatches workers, tracks todos, verifies results, handles retries, escalates blockers
 - Permissions: Read/write files; bash execution allowed
 - **Delegate when:** Cerebro has a plan ready and workers need to be dispatched • Multi-task execution needs orchestration and sequencing
 - **Don't delegate when:** Still in planning/design phase • Single one-off question not requiring a full task run`,

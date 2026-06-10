@@ -24,6 +24,7 @@ Use explicit gates for destructive, irreversible, privileged, external mutating,
 
 **Owner:** Wolverine | Jean Grey | Storm | Forge consultation
 **Category:** visual-engineering | architecture | explore | research | deep | quick
+**Depends On:** None | Task [number/id]
 **Files:** `[exact/path.ext]` (modify/create) or `None`
 **What:** [Specific implementation or verification action.]
 **TDD:** [Failing test to write first, or "Not applicable: [reason]".]

@@ -155,7 +155,7 @@ open-xmen models
 | Legion | Customer / product-owner proxy | `openai/gpt-5.4` |
 | Cypher | Requirements analyst | `openai/gpt-5.4` |
 | Professor X | Strategic planner | `openai/gpt-5.5` |
-| Cyclops | Execution layer conductor | `openai/gpt-5.5` |
+| Cyclops | Execution layer conductor with parallel fan-out and post-delegation verification gates | `openai/gpt-5.5` |
 | Wolverine | Implementation worker (code, tests, scripts) | `openai/gpt-5.5` |
 | Jean Grey | Design strategist (component specs, UX flows) | `openai/gpt-5.5` |
 | Storm | Visual engineering (CSS, styling, accessibility) | `openai/gpt-5.5` |
@@ -184,6 +184,8 @@ bunx open-xmen@latest install --dir /path/to/project --with-runtime-files --rese
 ├── plans/                       # approved plans
 ├── notepads/                    # customer visions, requirements, drafts, reviews, learnings
 ├── team-runs/                   # manifests, task state, mailbox logs, checkpoints, events
+│   ├── *.progress.jsonl          # visible progress milestones and long-running heartbeats
+│   └── *.problems.jsonl          # workflow problem list / improvement backlog
 ├── pending-todos/               # worker task todos
 ├── boulder.json                 # execution checkpoint
 ├── docs/                        # workflow, orchestration, and agent guides
@@ -213,4 +215,3 @@ npm run verify:release
 `npm run verify:release` builds the package, packs it with `npm pack --json --ignore-scripts`, checks the packaged runtime file set exactly, rejects forbidden paths such as dev-only plugin bridges or secret-like files, installs the tarball into a clean temp package, smoke-tests user-config install, project plugin-only install, runtime-file install, command/agent resolution through `opencode debug config`, plugin command/agent registration, cache-refreshing `open-xmen install`, and `open-xmen doctor`.
 
 Use `bunx open-xmen@latest install` for safe package/config refreshes outside OpenCode, and `bunx open-xmen@latest doctor [--dir <path>]` for diagnostics.
-

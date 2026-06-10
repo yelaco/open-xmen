@@ -21,13 +21,14 @@ flowchart TB
     Plan --> Cyclops
 
     subgraph Cyclops["Execution Layer — Cyclops"]
-        Route["Route by Category"] --> WJ["visual-engineering:\nJean Grey→Wolverine→Storm"]
-        Route --> FG["architecture: Forge"]
-        Route --> NC["explore: Nightcrawler"]
-        Route --> SG["research: Sage"]
-        Route --> WV["deep/quick/default:\nWolverine"]
+        Route["Route by Category\n+ dependency frontier"] --> Fanout["Parallel fan-out\n(cerebro_dispatch_batch)"]
+        Fanout --> WJ["visual-engineering:\nJean Grey→Wolverine→Storm"]
+        Fanout --> FG["architecture: Forge"]
+        Fanout --> NC["explore: Nightcrawler"]
+        Fanout --> SG["research: Sage"]
+        Fanout --> WV["deep/quick/default:\nWolverine"]
         WJ & FG & NC & SG & WV --> Collect["Collect TASK_RESULT\n(mailbox + task ledger)"]
-        Collect --> Verify["Cyclops Verification\n(run commands, check evidence)"]
+        Collect --> Verify["Post-delegation gate\n(run Verify commands,\ncheck evidence)"]
         Verify -->|"FAIL (≤2 retries)"| Route
     end
 
@@ -64,8 +65,10 @@ flowchart TB
 | `.cerebro/plans/*.md` | Professor X | Approved implementation plans. |
 | `.cerebro/boulder.json` | Cerebro | Business-level execution checkpoint: active plan, overall status, approvals, verification history, and decisions. Task progress lives in `.cerebro/team-runs/{run-id}.tasks.json`. |
 | `.cerebro/team-runs/{run-id}.json` | Cerebro | Run manifest for command, team name, teammates, approvals, mailbox decisions, verification, and cleanup. |
-| `.cerebro/team-runs/{run-id}.tasks.json` | Cerebro | OpenCode-managed task ledger updated by `cerebro_task_create/list/update`. |
-| `.cerebro/team-runs/{run-id}.mailbox.jsonl` | Cerebro team | Mailbox log written by `cerebro_mailbox_send`, `cerebro_agent_task`, `cerebro_dispatch_agent`, and `cerebro_collect_result`; read by `cerebro_mailbox_read`. |
+| `.cerebro/team-runs/{run-id}.tasks.json` | Cerebro | OpenCode-managed task ledger updated by `cerebro_task_create/list/update`; task records should include category, dependencies, and verification commands when created from plans. |
+| `.cerebro/team-runs/{run-id}.mailbox.jsonl` | Cerebro team | Mailbox log written by `cerebro_mailbox_send`, `cerebro_agent_task`, `cerebro_dispatch_agent`, `cerebro_dispatch_batch`, `cerebro_collect_result`, and `cerebro_collect_batch_results`; read by `cerebro_mailbox_read`. |
+| `.cerebro/team-runs/{run-id}.progress.jsonl` | Cerebro team | User-visible progress events and low-frequency heartbeats emitted while blocking collection is still running. |
+| `.cerebro/team-runs/{run-id}.problems.jsonl` | Cerebro team | Structured problem list for blockers, failed verification, runtime gaps, weak evidence, and workflow UX issues discovered during the run. |
 | `.cerebro/team-runs/{run-id}.checkpoints.jsonl` | Cerebro team | Durable checkpoints written by `cerebro_checkpoint`. |
 | `.cerebro/notepads/{plan}/conventions.md` | Cerebro | Coding patterns, naming, file structure, UI patterns. |
 | `.cerebro/notepads/{plan}/commands.md` | Cerebro | Useful install/test/lint/build/dev commands. |

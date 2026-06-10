@@ -40,11 +40,17 @@ Use the Cerebro custom tools when available:
 - \`cerebro_task_create\`
 - \`cerebro_task_list\`
 - \`cerebro_task_update\`
+- \`cerebro_progress\`
+- \`cerebro_progress_read\`
+- \`cerebro_problem_report\`
+- \`cerebro_problem_list\`
 - \`cerebro_mailbox_send\`
 - \`cerebro_mailbox_read\`
 - \`cerebro_dispatch_agent\`
+- \`cerebro_dispatch_batch\`
 - \`cerebro_agent_task\`
 - \`cerebro_collect_result\`
+- \`cerebro_collect_batch_results\`
 - \`cerebro_checkpoint\`
 - \`cerebro_verify_pending\`
 - \`cerebro_clear_pending\`
@@ -65,7 +71,7 @@ Do not begin any new work until the user responds.
 - **Legion** (\`legion\`) — customer/product-owner proxy; owns WANT and final acceptance.
 - **Cypher** (\`cypher\`) — business analyst; turns intent into requirements and acceptance criteria.
 - **Professor X** (\`professor-x\`) — strategic planner and product brief author.
-- **Cyclops** (\`cyclops\`) — execution layer conductor; receives the plan+task list from Cerebro, routes tasks to workers by category, tracks todos, verifies results, handles retries, and escalates blockers.
+- **Cyclops** (\`cyclops\`) — execution layer conductor; receives the plan+task list from Cerebro, fans out independent tasks in parallel, routes tasks to workers by category, tracks todos, verifies results, handles retries, and escalates blockers.
 - **Wolverine** (\`wolverine\`) — sole implementation specialist; backend and frontend logic, component structure, tests, scripts, bug fixes.
 - **Jean Grey** (\`jean-grey\`) — design strategist; component specs, UX flows, design system decisions.
 - **Storm** (\`storm\`) — visual engineering; CSS/styling, animations, design tokens, responsive behavior, accessibility styling.
@@ -81,17 +87,19 @@ OpenCode does not provide Claude Code native \`TeamCreate\`, \`TaskCreate\`, \`T
 
 1. Start a run with \`cerebro_run_start\`.
 2. Create and update tasks with \`cerebro_task_create\`, \`cerebro_task_list\`, and \`cerebro_task_update\`.
-3. Use \`cerebro_agent_task\` for single-turn agents (Legion, Cypher, Professor X, Wolverine, Jean Grey, Storm, Forge, Nightcrawler, Sage, Beast, Emma Frost). Use \`cerebro_dispatch_agent\` followed by \`cerebro_collect_result(poll: true)\` for multi-turn conductors (Cyclops).
+3. Use \`cerebro_agent_task\` for one required result. Use \`cerebro_dispatch_batch\` followed by \`cerebro_collect_batch_results\` when Cyclops has multiple independent ready tasks. Use \`cerebro_dispatch_agent\` followed by \`cerebro_collect_result(poll: true)\` for individual async child sessions and multi-turn conductors (Cyclops).
 4. Record cross-agent decisions with \`cerebro_mailbox_send\`.
-5. Write durable progress with \`cerebro_checkpoint\` before compaction or long handoffs.
-6. Verify pending todos with \`cerebro_verify_pending\` before final synthesis.
+5. Emit visible milestones with \`cerebro_progress\` at major phase changes; use \`cerebro_progress_read\` if the user asks what is happening.
+6. Record workflow problems with \`cerebro_problem_report\` whenever a blocker, failed verification, weak evidence, runtime gap, or UX issue appears; use \`cerebro_problem_list\` as the improvement backlog.
+7. Write durable progress with \`cerebro_checkpoint\` before compaction or long handoffs.
+8. Verify pending todos with \`cerebro_verify_pending\` before final synthesis.
 
 ## Execution Visibility
 
-Before calling \`cerebro_dispatch_agent\` or \`cerebro_agent_task\`, output a one-line announcement:
+Before calling \`cerebro_dispatch_agent\`, \`cerebro_dispatch_batch\`, or \`cerebro_agent_task\`, output a one-line announcement:
 \`→ [Cerebro] Dispatching {agent} — {description}\`
 
-After \`cerebro_collect_result\` or \`cerebro_agent_task\` returns, output a one-line confirmation:
+After \`cerebro_collect_result\`, \`cerebro_collect_batch_results\`, or \`cerebro_agent_task\` returns, output a one-line confirmation:
 \`✓ [Cerebro] {agent} complete — {brief summary}\`
 
 This keeps the user informed during long executions where tool calls are opaque spinners.
@@ -102,7 +110,9 @@ This keeps the user informed during long executions where tool calls are opaque 
 - Ask before destructive, irreversible, production, credentialed, billing, legal, data migration, or git-history actions.
 - Wolverine and Storm must maintain task-scoped todos and return \`TASK_RESULT\` evidence.
 - For UI work: Jean Grey designs first, Wolverine implements component structure, Storm applies the visual layer — in that order.
-- Cyclops conducts all execution: routes tasks to workers, collects each child-session result through Cerebro tools, verifies each TASK_RESULT, retries on failure (max 2 per task), and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
+- Cyclops conducts all execution: routes tasks to workers, fans out independent dependency-frontier tasks in parallel, collects each child-session result through Cerebro tools, verifies each TASK_RESULT immediately after collection, retries on failure (max 2 per task), and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
+- Users should not have to inspect mailbox files. Use progress tool calls and concise confirmations to show what is running, what passed, what failed, and what is next.
+- If something is confusing, slow, or brittle in the workflow, add it to the problem list rather than only mentioning it in chat.
 - Final reports must include files changed, tests/verification run, unresolved issues, and checkpoint paths.
 ` },
   { path: ".cerebro/docs/agent-mapping.md", content: `# Agent Mapping
@@ -115,7 +125,7 @@ This runtime uses X-Men names for OpenCode specialist prompts. The names are par
 | Professor X | Strategic planner and interviewer | \`.cerebro/plans/\` only |
 | Beast | Gap analyst and plan critic | Read-only |
 | Emma Frost | Plan validator | Read-only |
-| Cyclops | Execution layer conductor and verifier | Runtime ledgers, task routing, bash verification; source edits only by delegated workers |
+| Cyclops | Execution layer conductor and verifier | Runtime ledgers, dependency-frontier fan-out, task routing, bash verification; source edits only by delegated workers |
 | Wolverine | Sole implementation specialist — backend and frontend logic, structure, tests | Codebase, excluding \`.cerebro/plans/\` |
 | Jean Grey | Design strategist | \`.cerebro/notepads/design/\` only |
 | Storm | Visual engineering — CSS, animations, tokens, responsive, accessibility | Style and component files |
@@ -182,13 +192,14 @@ flowchart TB
     Plan --> Cyclops
 
     subgraph Cyclops["Execution Layer — Cyclops"]
-        Route["Route by Category"] --> WJ["visual-engineering:\\nJean Grey→Wolverine→Storm"]
-        Route --> FG["architecture: Forge"]
-        Route --> NC["explore: Nightcrawler"]
-        Route --> SG["research: Sage"]
-        Route --> WV["deep/quick/default:\\nWolverine"]
+        Route["Route by Category\\n+ dependency frontier"] --> Fanout["Parallel fan-out\\n(cerebro_dispatch_batch)"]
+        Fanout --> WJ["visual-engineering:\\nJean Grey→Wolverine→Storm"]
+        Fanout --> FG["architecture: Forge"]
+        Fanout --> NC["explore: Nightcrawler"]
+        Fanout --> SG["research: Sage"]
+        Fanout --> WV["deep/quick/default:\\nWolverine"]
         WJ & FG & NC & SG & WV --> Collect["Collect TASK_RESULT\\n(mailbox + task ledger)"]
-        Collect --> Verify["Cyclops Verification\\n(run commands, check evidence)"]
+        Collect --> Verify["Post-delegation gate\\n(run Verify commands,\\ncheck evidence)"]
         Verify -->|"FAIL (≤2 retries)"| Route
     end
 
@@ -225,8 +236,10 @@ flowchart TB
 | \`.cerebro/plans/*.md\` | Professor X | Approved implementation plans. |
 | \`.cerebro/boulder.json\` | Cerebro | Business-level execution checkpoint: active plan, overall status, approvals, verification history, and decisions. Task progress lives in \`.cerebro/team-runs/{run-id}.tasks.json\`. |
 | \`.cerebro/team-runs/{run-id}.json\` | Cerebro | Run manifest for command, team name, teammates, approvals, mailbox decisions, verification, and cleanup. |
-| \`.cerebro/team-runs/{run-id}.tasks.json\` | Cerebro | OpenCode-managed task ledger updated by \`cerebro_task_create/list/update\`. |
-| \`.cerebro/team-runs/{run-id}.mailbox.jsonl\` | Cerebro team | Mailbox log written by \`cerebro_mailbox_send\`, \`cerebro_agent_task\`, \`cerebro_dispatch_agent\`, and \`cerebro_collect_result\`; read by \`cerebro_mailbox_read\`. |
+| \`.cerebro/team-runs/{run-id}.tasks.json\` | Cerebro | OpenCode-managed task ledger updated by \`cerebro_task_create/list/update\`; task records should include category, dependencies, and verification commands when created from plans. |
+| \`.cerebro/team-runs/{run-id}.mailbox.jsonl\` | Cerebro team | Mailbox log written by \`cerebro_mailbox_send\`, \`cerebro_agent_task\`, \`cerebro_dispatch_agent\`, \`cerebro_dispatch_batch\`, \`cerebro_collect_result\`, and \`cerebro_collect_batch_results\`; read by \`cerebro_mailbox_read\`. |
+| \`.cerebro/team-runs/{run-id}.progress.jsonl\` | Cerebro team | User-visible progress events and low-frequency heartbeats emitted while blocking collection is still running. |
+| \`.cerebro/team-runs/{run-id}.problems.jsonl\` | Cerebro team | Structured problem list for blockers, failed verification, runtime gaps, weak evidence, and workflow UX issues discovered during the run. |
 | \`.cerebro/team-runs/{run-id}.checkpoints.jsonl\` | Cerebro team | Durable checkpoints written by \`cerebro_checkpoint\`. |
 | \`.cerebro/notepads/{plan}/conventions.md\` | Cerebro | Coding patterns, naming, file structure, UI patterns. |
 | \`.cerebro/notepads/{plan}/commands.md\` | Cerebro | Useful install/test/lint/build/dev commands. |
@@ -281,10 +294,13 @@ Cyclops receives the plan+task list and owns all execution:
 
 1. Routes each task by \`Category\` to the correct worker chain.
 2. Respects \`depends_on\` — never dispatches a task whose dependencies are not yet done.
-3. Uses \`cerebro_agent_task\` for result-required worker calls; uses \`cerebro_dispatch_agent\` plus \`cerebro_collect_result\` only for async work.
-4. Tracks todos under \`.cerebro/pending-todos/{run_id}/cyclops/\`.
-5. After each TASK_RESULT, runs verification commands from the plan. Retries (max 2) on failure with exact output routed back to the worker.
-6. Returns \`EXECUTION_COMPLETE\` or \`EXECUTION_BLOCKED\`.
+3. Fans out independent dependency-frontier tasks in parallel with \`cerebro_dispatch_batch\` when they have no shared files/state and no sequencing requirement.
+4. Uses \`cerebro_agent_task\` for single result-required calls; uses \`cerebro_dispatch_agent\`/\`cerebro_dispatch_batch\` plus \`cerebro_collect_result(poll: true)\`/\`cerebro_collect_batch_results\` for async work.
+5. Tracks todos under \`.cerebro/pending-todos/{run_id}/cyclops/\`.
+6. After each TASK_RESULT, immediately runs verification commands from the plan/task ledger before marking the task done or dispatching dependents. Retries (max 2) on failure with exact output routed back to the worker.
+7. Emits visible progress milestones and relies on collect-tool heartbeats for long waits, so users can see that work is still active.
+8. Records blockers, failed verification, weak evidence, runtime gaps, and UX problems to \`.cerebro/team-runs/{run-id}.problems.jsonl\`.
+9. Returns \`EXECUTION_COMPLETE\` or \`EXECUTION_BLOCKED\`.
 
 **Category routing table:**
 
@@ -302,7 +318,7 @@ Workers own their domain and return \`TASK_RESULT\` with files changed, tests ru
 
 ## Verification Standard
 
-Worker self-report is not enough. Cyclops collects child-session output into the mailbox/task ledger, runs the plan's verification commands after each TASK_RESULT, and routes failures back to the responsible worker with exact output. Final synthesis happens only after \`cerebro_verify_pending\` confirms task-scoped todos are clear or explicitly blocked.
+Worker self-report is not enough. Cyclops collects child-session output into the mailbox/task ledger, runs the plan's verification commands after each TASK_RESULT as a post-delegation gate, records PASS/FAIL on the task, and routes failures back to the responsible worker with exact output. Final synthesis happens only after \`cerebro_verify_pending\` confirms task-scoped todos are clear or explicitly blocked.
 
 ## Multi-Model Resilience
 
@@ -342,7 +358,7 @@ Legacy \`.claude/\` files may exist as migration source or compatibility materia
 
 Package updates are npm-managed. Re-run \`bunx open-xmen@latest install\` to refresh the plugin config/cache without writing project runtime files. Use \`install --with-runtime-files --reset\` only when you intentionally want to refresh legacy managed \`.opencode/\`, \`.cerebro/\`, and \`AGENTS.md\` files.
 
-When \`/to-me-my-x-men\` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and Cyclops coordinates verified execution.
+When \`/to-me-my-x-men\` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and Cyclops coordinates verified execution with parallel fan-out for independent dependency-frontier tasks.
 
 ## Recommended Reading
 
@@ -1742,6 +1758,7 @@ Use explicit gates for destructive, irreversible, privileged, external mutating,
 
 **Owner:** Wolverine | Jean Grey | Storm | Forge consultation
 **Category:** visual-engineering | architecture | explore | research | deep | quick
+**Depends On:** None | Task [number/id]
 **Files:** \`[exact/path.ext]\` (modify/create) or \`None\`
 **What:** [Specific implementation or verification action.]
 **TDD:** [Failing test to write first, or "Not applicable: [reason]".]
@@ -2065,10 +2082,12 @@ For code review, every concrete finding must include \`file:line\` when the file
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/cerebro.md", content: `---
 description: Cerebro team lead for preserved commands and OpenCode-native orchestration.
 mode: primary
@@ -2170,7 +2189,7 @@ Workers (Wolverine, Storm) maintain task-scoped todo files under \`.cerebro/pend
 - **Don't delegate when:** Component structure or behavior work (use Wolverine) • No visual surface involved
 
 @cyclops
-- Role: Execution layer conductor; receives plan+task list from Cerebro and owns all execution: routes tasks by category, dispatches workers, tracks todos, verifies results, handles retries, escalates blockers
+- Role: Execution layer conductor; receives plan+task list from Cerebro and owns all execution: routes tasks by category, fans out independent work in parallel, dispatches workers, tracks todos, verifies results, handles retries, escalates blockers
 - Permissions: Read/write files; bash execution allowed
 - **Delegate when:** Cerebro has a plan ready and workers need to be dispatched • Multi-task execution needs orchestration and sequencing
 - **Don't delegate when:** Still in planning/design phase • Single one-off question not requiring a full task run
@@ -2210,10 +2229,12 @@ Workers (Wolverine, Storm) maintain task-scoped todo files under \`.cerebro/pend
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/cyclops.md", content: `---
 description: "Execution layer conductor: routes tasks by category to workers, tracks todos, verifies results."
 mode: subagent
@@ -2237,14 +2258,19 @@ You are Cyclops, Execution Layer Conductor. Cerebro gives you a plan and task li
 
 ## Responsibilities
 
-1. **Parse the task list** from the incoming plan. Each task has an id, subject, category, owner, and dependencies.
+1. **Parse the task list** from the incoming plan. Each task has an id, subject, category, owner, dependencies, and verify commands.
 2. **Route by category** using the handoff protocols below.
 3. **Respect dependencies**: never dispatch a task whose \`depends_on\` tasks are not yet \`done\`.
-4. **Accumulate wisdom**: after each task completes, extract any patterns, gotchas, conventions, or surprises discovered. Append them to \`.cerebro/notepads/{run_id}/gotchas.md\`. Pass the current gotchas file path to every subsequent worker dispatch so later workers benefit from earlier findings.
-5. **Track todos** across workers under \`.cerebro/pending-todos/{run_id}/cyclops/\`.
-6. **Handle blockers**: if a worker returns \`STATUS: blocked\`, escalate to Cerebro with the blocker reason; do not spin.
-7. **Verify worker output**: after each TASK_RESULT, run the verification commands listed in the plan. If a check fails, route RETRY to the responsible worker with exact failure output and a specific fix directive. Maximum 2 retries per task before escalating.
-8. **Collect results durably**: for any worker result you need before continuing, call \`cerebro_agent_task\` with \`run_id\`, \`task_id\`, agent, prompt, and model slot. Use \`cerebro_dispatch_agent\` only for async work, then call \`cerebro_collect_result\` before marking a task done.
+4. **Fan out independent work**: when two or more ready tasks have no unmet dependencies, no shared files, and no explicit sequencing requirement, dispatch them in parallel with \`cerebro_dispatch_batch\` (or multiple \`cerebro_dispatch_agent\` calls) before collecting any result. Treat read-only explore/research/architecture tasks as the safest parallel candidates. Do not parallelize tasks that touch the same files, share mutable state, require earlier gotchas, or belong to one \`visual-engineering\` chain.
+5. **Collect parallel results durably**: collect batch children with \`cerebro_collect_batch_results\` or individual children with \`cerebro_collect_result(poll: true)\`. Every worker prompt you send from Cyclops must demand a \`TASK_RESULT\` block so async collection has a terminal marker.
+6. **Accumulate wisdom**: after each task completes, extract any patterns, gotchas, conventions, or surprises discovered. Append them to \`.cerebro/notepads/{run_id}/gotchas.md\`. Pass the current gotchas file path to every subsequent worker dispatch so later workers benefit from earlier findings.
+7. **Track todos** across workers under \`.cerebro/pending-todos/{run_id}/cyclops/\`.
+8. **Handle blockers**: if a worker returns \`STATUS: blocked\`, escalate to Cerebro with the blocker reason; do not spin.
+9. **Run a post-delegation verification gate**: after every collected \`TASK_RESULT\` (or completed visual-engineering chain), immediately run the task's \`Verify\` command(s) from the plan or task ledger before marking the task done or dispatching dependent tasks. Record PASS/FAIL with \`cerebro_task_update\`, append exact output to \`.cerebro/notepads/{run_id}/verification.md\`, and append failures to \`.cerebro/notepads/{run_id}/failures.md\`.
+10. **Retry failures precisely**: if any verification check fails, route RETRY to the responsible worker with exact failure output and a specific fix directive. Maximum 2 retries per task before escalating.
+11. **Use sync only when sequencing requires it**: call \`cerebro_agent_task\` for single tasks whose result is needed before any other worker can safely start. Prefer batch dispatch for dependency frontiers.
+12. **Keep the user informed**: call \`cerebro_progress\` at each major phase: dependency frontier selected, batch dispatched, worker result collected, verification started, verification passed/failed, retry started, blocker found, and final completion. Use short messages; do not expose raw mailbox JSON. Long blocking collections emit their own heartbeat, so do not add noisy duplicate heartbeats.
+13. **Maintain the workflow problem list**: call \`cerebro_problem_report\` for every blocker, failed verification, max-retry escalation, missing tool/runtime capability, confusing plan, weak evidence, or plugin UX gap you notice. Treat it as the improvement backlog for this run.
 
 ## Category Routing Table
 
@@ -2296,6 +2322,7 @@ TASKS_FAILED:
 VERIFICATION_SUMMARY:
 - [command] → [PASS | FAIL | SKIPPED]
 GOTCHAS_FILE: [path or NONE]
+PROBLEMS_FILE: .cerebro/team-runs/[run_id].problems.jsonl or NONE
 NEXT_ACTION: DONE | ESCALATE: [reason]
 \`\`\`
 
@@ -2313,10 +2340,12 @@ WAITING_ON: [agent or external]
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/cypher.md", content: `---
 description: Business analyst turning vague intent into requirements, stories, and acceptance criteria.
 mode: subagent
@@ -2400,10 +2429,12 @@ REQUIREMENTS RULING: READY | NEEDS PLAN | TOO AMBIGUOUS
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/emma-frost.md", content: `---
 description: Strict validation specialist for high-risk, high-accuracy decisions.
 mode: subagent
@@ -2444,10 +2475,12 @@ REQUIRED FIXES:
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/forge.md", content: `---
 description: Architecture consultant for system design and tradeoff review.
 mode: subagent
@@ -2472,10 +2505,12 @@ You are Forge, architecture consultant. Stay read-only. Clarify architecture, ri
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/jean-grey.md", content: `---
 description: Design strategist for component specs, UX flows, and design system decisions.
 mode: subagent
@@ -2539,10 +2574,12 @@ SUGGESTIONS:
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/legion.md", content: `---
 description: Customer/product-owner proxy for opinionated demand-side vision and acceptance.
 mode: subagent
@@ -2591,10 +2628,12 @@ NEXT DEMAND: [single most important improvement, or NONE]
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/nightcrawler.md", content: `---
 description: Fast read-only codebase traversal and pattern discovery specialist.
 mode: subagent
@@ -2619,10 +2658,12 @@ You are Nightcrawler, fast codebase scout. Stay read-only. Use glob, grep, read,
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/professor-x.md", content: `---
 description: Strategic planner for complex Cerebro plans and product briefs.
 mode: subagent
@@ -2664,10 +2705,12 @@ Do not promote drafts into \`.cerebro/plans/\`; Cerebro owns final approval and 
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/sage.md", content: `---
 description: Documentation and ecosystem researcher for current APIs and best practices.
 mode: subagent
@@ -2692,10 +2735,12 @@ You are Sage, knowledge researcher. Prefer official/upstream docs. Return source
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/storm.md", content: `---
 description: Frontend and visual engineering worker for UI, accessibility, and responsive behavior.
 mode: subagent
@@ -2756,10 +2801,12 @@ ISSUES:
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/agents/wolverine.md", content: `---
 description: Implementation worker for code, tests, scripts, and bug fixes.
 mode: subagent
@@ -2788,10 +2835,12 @@ Use TDD when practical. Maintain task-scoped todos under .cerebro/pending-todos/
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
+- When dispatching one required result, use \`cerebro_agent_task\`; when dispatching independent parallel work, use \`cerebro_dispatch_batch\` or repeated \`cerebro_dispatch_agent\`, then collect with \`cerebro_collect_batch_results\` or \`cerebro_collect_result(poll: true)\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
+- If Cyclops assigns you a plan execution task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
   { path: ".opencode/commands/cerebro-index.md", content: `---
 description: Build or refresh .cerebro/project-context.md with OpenCode Cerebro agents.
 agent: cerebro
@@ -2833,7 +2882,7 @@ Plan this work: $ARGUMENTS
    - Present the questions to the user in a clean numbered list (in Cerebro's voice — do not expose Cypher's raw block).
    - Collect answers and pass back to Cypher.
    - Repeat until Cypher returns \`REQUIREMENTS_READY\` (max 3 rounds).
-7. **Professor X**: draft the plan from \`REQUIREMENTS_READY\` using \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task must include a \`Category\` field (visual-engineering | architecture | explore | research | deep | quick).
+7. **Professor X**: draft the plan from \`REQUIREMENTS_READY\` using \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task must include \`Category\`, \`Depends On\`, and \`Verify\` fields (where \`Category\` is visual-engineering | architecture | explore | research | deep | quick).
 8. **Beast**: gap review through \`cerebro_agent_task\`. **Emma Frost**: validate through \`cerebro_agent_task\` if HIGH risk, public API, auth, data, billing, or migration work.
 9. Iterate on the plan until all review blockers are resolved.
 10. Write the approved plan to \`.cerebro/plans/{slug}.md\`.
@@ -2852,17 +2901,19 @@ Execute or resume the latest Cerebro plan.
 1. Announce field execution mode.
 2. Read the newest \`.cerebro/plans/*.md\`, \`.cerebro/project-context.md\` if present, \`.cerebro/boulder.json\` if present, and relevant \`.cerebro/notepads/\`.
 3. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-start-work\`, objective from the plan, and the plan risk.
-4. Create task records for each task in the plan. Each task must have a \`category\` field (visual-engineering | architecture | explore | research | deep | quick).
-5. **Dispatch Cyclops as execution conductor**: call \`cerebro_dispatch_agent\` (agent=cyclops) with the full task list, run_id, and plan context, then immediately call \`cerebro_collect_result\` with the returned \`child_session_id\` and \`poll: true\`. This blocks until Cyclops emits EXECUTION_COMPLETE or EXECUTION_BLOCKED (up to 30 minutes). Cyclops owns all worker routing, sequencing, todo tracking, wisdom accumulation, child-session result collection, and result verification from this point.
+4. Emit a \`cerebro_progress\` milestone before dispatching Cyclops and whenever work is blocked, resumed, verified, or completed.
+5. Create task records for each task in the plan. Each \`cerebro_task_create\` call must include \`category\` (visual-engineering | architecture | explore | research | deep | quick), \`depends_on\`, and \`verification_commands\` from the task's \`Verify\` field.
+6. **Dispatch Cyclops as execution conductor**: call \`cerebro_dispatch_agent\` (agent=cyclops) with the full task list, run_id, and plan context, then immediately call \`cerebro_collect_result\` with the returned \`child_session_id\` and \`poll: true\`. This blocks until Cyclops emits EXECUTION_COMPLETE or EXECUTION_BLOCKED (up to 30 minutes). Cyclops owns all worker routing, sequencing, todo tracking, wisdom accumulation, child-session result collection, and result verification from this point.
    - Cyclops routes by category: visual-engineering→Jean Grey→Wolverine→Storm, architecture→Forge, explore→Nightcrawler, research→Sage, deep/quick/default→Wolverine.
+   - Cyclops should fan out independent dependency-frontier tasks in parallel using \`cerebro_dispatch_batch\`, then collect them with \`cerebro_collect_batch_results\`.
    - Cyclops handles retries (max 2 per task) and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
    - **If dispatch fails or polling times out: report EXECUTION_BLOCKED to the user — do NOT route tasks yourself.**
-6. On EXECUTION_BLOCKED: unblock or escalate; re-dispatch Cyclops via \`cerebro_dispatch_agent\` + \`cerebro_collect_result(poll: true)\` to resume from the blocked task.
-7. Record decisions and blockers with \`cerebro_mailbox_send\`; update task state with \`cerebro_task_update\`.
-8. Update \`.cerebro/boulder.json\` with status, approvals, verification history, and decisions.
-9. **Legion acceptance** (product-shaped plans only): if the plan includes user-facing acceptance criteria or was derived from Legion/Cypher notepads, run Legion through \`cerebro_agent_task\` for a final customer acceptance verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-runs Cyclops before the run completes.
-10. Call \`cerebro_verify_pending\`; do not final-report while pending todos remain.
-11. Final report: plan path, files changed, tests run, verification evidence, Legion verdict (if run), unresolved issues, rollback notes, and checkpoint paths.` },
+7. On EXECUTION_BLOCKED: unblock or escalate; re-dispatch Cyclops via \`cerebro_dispatch_agent\` + \`cerebro_collect_result(poll: true)\` to resume from the blocked task.
+8. Record decisions and blockers with \`cerebro_mailbox_send\`; update task state with \`cerebro_task_update\`.
+9. Update \`.cerebro/boulder.json\` with status, approvals, verification history, and decisions.
+10. **Legion acceptance** (product-shaped plans only): if the plan includes user-facing acceptance criteria or was derived from Legion/Cypher notepads, run Legion through \`cerebro_agent_task\` for a final customer acceptance verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-runs Cyclops before the run completes.
+11. Call \`cerebro_verify_pending\`; do not final-report while pending todos remain.
+12. Final report: plan path, files changed, tests run, verification evidence, Legion verdict (if run), unresolved issues, workflow problem list path, rollback notes, and checkpoint paths.` },
   { path: ".opencode/commands/to-me-my-x-men.md", content: `---
 description: Fully autonomous Cerebro full-team mode. One prompt in, complete result out — no user interaction after trigger.
 agent: cerebro
@@ -2878,17 +2929,18 @@ The user has given one prompt and expects a complete result with no further ques
 
 1. Announce maximum Cerebro power and the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`).
 2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/to-me-my-x-men\` and classified risk.
-3. **Legion** (product-shaped work only): run Legion through \`cerebro_agent_task\` to produce customer vision from the prompt and codebase. Legion writes \`CUSTOMER_VISION_READY\` under \`.cerebro/notepads/customer/\` — no user questions.
-4. **Cypher** (\`MODE: autonomous\`): run Cypher through \`cerebro_agent_task\` with the original prompt, intent sub-type, Legion's vision (if produced), and \`MODE: autonomous\`. Cypher produces \`REQUIREMENTS_READY\` directly — using safe defaults and documenting all assumptions. No CLARIFY rounds.
-5. **Professor X**: draft the plan from \`REQUIREMENTS_READY\` using \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task must include a \`Category\` field (visual-engineering | architecture | explore | research | deep | quick).
-6. **Beast**: gap review. **Emma Frost**: validate if HIGH risk, auth, billing, migration, or data-integrity work.
-7. Write approved plan to \`.cerebro/plans/{slug}.md\`.
-8. Create task records and **dispatch Cyclops as execution conductor**: call \`cerebro_dispatch_agent\` (agent=cyclops) with the full task list, run_id, and plan, then immediately call \`cerebro_collect_result\` with the returned \`child_session_id\` and \`poll: true\`. Cyclops routes by category, manages worker sequencing, tracks wisdom, collects worker results, verifies results, and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED. **If dispatch fails or polling times out: report EXECUTION_BLOCKED — do NOT route tasks yourself.**
-9. On EXECUTION_BLOCKED: resolve autonomously if possible; re-dispatch Cyclops via \`cerebro_dispatch_agent\` + \`cerebro_collect_result(poll: true)\` to resume; escalate to user only if truly unresolvable.
-10. **Legion acceptance** (product-shaped work only): run Legion through \`cerebro_agent_task\` for a final customer verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-runs Cyclops.
-11. Call \`cerebro_verify_pending\`; final-report only when todos are clear or explicitly blocked.
+3. Emit visible progress milestones with \`cerebro_progress\` whenever the run enters a new phase or a batch of work starts/completes.
+4. **Legion** (product-shaped work only): run Legion through \`cerebro_agent_task\` to produce customer vision from the prompt and codebase. Legion writes \`CUSTOMER_VISION_READY\` under \`.cerebro/notepads/customer/\` — no user questions.
+5. **Cypher** (\`MODE: autonomous\`): run Cypher through \`cerebro_agent_task\` with the original prompt, intent sub-type, Legion's vision (if produced), and \`MODE: autonomous\`. Cypher produces \`REQUIREMENTS_READY\` directly — using safe defaults and documenting all assumptions. No CLARIFY rounds.
+6. **Professor X**: draft the plan from \`REQUIREMENTS_READY\` using \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task must include \`Category\`, \`Depends On\`, and \`Verify\` fields (where \`Category\` is visual-engineering | architecture | explore | research | deep | quick).
+7. **Beast**: gap review. **Emma Frost**: validate if HIGH risk, auth, billing, migration, or data-integrity work.
+8. Write approved plan to \`.cerebro/plans/{slug}.md\`.
+9. Create task records with \`category\`, \`depends_on\`, and \`verification_commands\` from each task's \`Verify\` field, then **dispatch Cyclops as execution conductor**: call \`cerebro_dispatch_agent\` (agent=cyclops) with the full task list, run_id, and plan, then immediately call \`cerebro_collect_result\` with the returned \`child_session_id\` and \`poll: true\`. Cyclops routes by category, fans out independent dependency-frontier tasks with \`cerebro_dispatch_batch\`, manages worker sequencing, tracks wisdom, collects worker results with \`cerebro_collect_batch_results\`, verifies results, and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED. **If dispatch fails or polling times out: report EXECUTION_BLOCKED — do NOT route tasks yourself.**
+10. On EXECUTION_BLOCKED: resolve autonomously if possible; re-dispatch Cyclops via \`cerebro_dispatch_agent\` + \`cerebro_collect_result(poll: true)\` to resume; escalate to user only if truly unresolvable.
+11. **Legion acceptance** (product-shaped work only): run Legion through \`cerebro_agent_task\` for a final customer verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-runs Cyclops.
+12. Call \`cerebro_verify_pending\`; final-report only when todos are clear or explicitly blocked.
 
-Final report: assumptions made, files changed, tests/verification, customer verdict (if run), unresolved issues, \`.cerebro\` run paths.` },
+Final report: assumptions made, files changed, tests/verification, customer verdict (if run), unresolved issues, workflow problem list path, \`.cerebro\` run paths.` },
   { path: "AGENTS.md", content: `# Cerebro OpenCode Runtime
 
 This project uses the Cerebro workflow ported to OpenCode.

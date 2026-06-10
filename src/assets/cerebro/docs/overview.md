@@ -32,7 +32,7 @@ Legacy `.claude/` files may exist as migration source or compatibility material,
 
 Package updates are npm-managed. Re-run `bunx open-xmen@latest install` to refresh the plugin config/cache without writing project runtime files. Use `install --with-runtime-files --reset` only when you intentionally want to refresh legacy managed `.opencode/`, `.cerebro/`, and `AGENTS.md` files.
 
-When `/to-me-my-x-men` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and Cyclops coordinates verified execution.
+When `/to-me-my-x-men` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and Cyclops coordinates verified execution with parallel fan-out for independent dependency-frontier tasks.
 
 ## Recommended Reading
 
