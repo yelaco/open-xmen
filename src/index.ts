@@ -1,7 +1,7 @@
-import type { Plugin, PluginInput } from "@opencode-ai/plugin";
+import type { Plugin } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import type { Permission } from "@opencode-ai/sdk";
-import { appendFile, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, readFile, readdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -25,6 +25,32 @@ import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
 import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, modelSlots } from "./config/models.js";
 import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent } from "./auto-update.js";
+import type { TaskRecord, TaskStatus } from "./workflow/types.js";
+import {
+  appendJsonl,
+  createTaskMutex,
+  loadTasks,
+  mailboxFile,
+  manifestFile,
+  now,
+  problemsFile,
+  progressFile,
+  safeRuntimePath,
+  saveTasks,
+  slug,
+  writeJson,
+} from "./workflow/fs.js";
+import {
+  assistantTextFromMessages,
+  childSessionID,
+  hasChildSessionClient,
+  isRecord,
+  parseModelID,
+  resultData,
+  terminalAssistantMarker,
+} from "./workflow/results.js";
+import { createEventRecorder } from "./workflow/events.js";
+import { createSessionRunner } from "./workflow/sessions.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
 const RISKS = [...CEREBRO_RISKS] as const;
@@ -34,15 +60,6 @@ const SECRET_PATH_PATTERN = /(^|[/\\])\.env(\.|$|[/\\])|secret|credential|privat
 const MAX_PENDING_FILES = 500;
 const MAX_PENDING_FILE_BYTES = 64 * 1024;
 type Risk = (typeof RISKS)[number];
-type TaskStatus = (typeof TASK_STATUSES)[number];
-
-type ProgressStatus = "started" | "running" | "completed" | "blocked" | "failed" | "info";
-type ProblemSeverity = "info" | "warning" | "error" | "blocker";
-type ProblemStatus = "open" | "mitigated" | "resolved";
-
-type ToolProgressContext = {
-  metadata?: (input: { title?: string; metadata?: Record<string, unknown> }) => void;
-};
 
 type OpenCodeConfig = Record<string, unknown> & {
   command?: Record<string, {
@@ -55,115 +72,6 @@ type OpenCodeConfig = Record<string, unknown> & {
   }>;
   agent?: Record<string, Record<string, unknown> | undefined>;
 };
-
-type RuntimeContext = {
-  worktree: string;
-  directory: string;
-};
-
-type TaskRecord = {
-  id: string;
-  subject: string;
-  description: string;
-  owner: string;
-  category?: string;
-  verification_commands?: string[];
-  status: TaskStatus;
-  depends_on: string[];
-  created_at: string;
-  updated_at: string;
-  notes: string[];
-  verification: Array<{ at: string; result: string; command?: string; notes?: string }>;
-};
-
-type ChildSessionClient = {
-  session: {
-    create(input: {
-      body: { parentID?: string; title: string };
-      query?: { directory: string };
-    }): Promise<{ data?: { id?: string } | null; id?: string }>;
-    promptAsync(input: {
-      path: { id: string };
-      query?: { directory: string };
-      body: {
-        agent: string;
-        model?: { providerID: string; modelID: string };
-        noReply: boolean;
-        parts: Array<{ type: "text"; text: string }>;
-      };
-    }): Promise<unknown>;
-    prompt?(input: {
-      path: { id: string };
-      query?: { directory: string };
-      body: {
-        agent: string;
-        model?: { providerID: string; modelID: string };
-        noReply?: boolean;
-        parts: Array<{ type: "text"; text: string }>;
-      };
-    }): Promise<unknown>;
-    messages?(input: {
-      path: { id: string };
-      query?: { directory: string; limit?: number };
-    }): Promise<unknown>;
-  };
-};
-
-function now() {
-  return new Date().toISOString();
-}
-
-function slug(input: string) {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "cerebro-run";
-}
-
-function runtimeRoot(ctx: RuntimeContext) {
-  return path.join(ctx.worktree || ctx.directory, ".cerebro");
-}
-
-function safeRuntimePath(ctx: RuntimeContext, relativePath: string) {
-  const root = runtimeRoot(ctx);
-  const full = path.resolve(root, relativePath);
-  const normalizedRoot = path.resolve(root) + path.sep;
-  if (full !== path.resolve(root) && !full.startsWith(normalizedRoot)) {
-    throw new Error(`Path escapes .cerebro runtime: ${relativePath}`);
-  }
-  return full;
-}
-
-async function readJson<T>(file: string, fallback: T): Promise<T> {
-  try {
-    return JSON.parse(await readFile(file, "utf8")) as T;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return fallback;
-    throw err;
-  }
-}
-
-async function writeJson(file: string, data: unknown) {
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-}
-
-async function appendJsonl(file: string, data: unknown) {
-  await mkdir(path.dirname(file), { recursive: true });
-  await appendFile(file, `${JSON.stringify(data)}\n`, "utf8");
-}
-
-function parseModelID(model: string) {
-  const [providerID, ...rest] = model.split("/");
-  const modelID = rest.join("/");
-  if (!providerID || !modelID) throw new Error(`Invalid model id: ${model}`);
-  return { providerID, modelID };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function defaultAgentDefinitions() {
   return [
@@ -264,514 +172,17 @@ async function scanPendingTodos(root: string, teamName?: string) {
   return items;
 }
 
-function hasChildSessionClient(client: PluginInput["client"]): client is PluginInput["client"] & ChildSessionClient {
-  if (!isRecord(client)) return false;
-  const session = client.session;
-  if (!isRecord(session)) return false;
-  return typeof session.create === "function" && typeof session.promptAsync === "function";
-}
-
-function childSessionID(result: unknown) {
-  if (!isRecord(result)) return undefined;
-  const data = result.data;
-  if (isRecord(data) && typeof data.id === "string") return data.id;
-  return typeof result.id === "string" ? result.id : undefined;
-}
-
-function resultData(value: unknown) {
-  if (isRecord(value) && "data" in value) return value.data;
-  return value;
-}
-
-function assistantTextFromMessages(result: unknown) {
-  const data = resultData(result);
-  const messages = Array.isArray(data) ? data : [];
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const entry = messages[i];
-    if (!isRecord(entry)) continue;
-    const info = entry.info;
-    if (!isRecord(info) || info.role !== "assistant") continue;
-    const parts = Array.isArray(entry.parts) ? entry.parts : [];
-    const text = parts
-      .filter((part) => isRecord(part) && part.type === "text" && typeof part.text === "string")
-      .map((part) => String((part as { text: string }).text))
-      .join("\n")
-      .trim();
-    if (text) return text;
-    if (isRecord(info.structured) && typeof info.structured.text === "string") return info.structured.text;
-  }
-  return "";
-}
-
-const CHILD_SESSION_TERMINAL_MARKERS = [
-  "EXECUTION_COMPLETE",
-  "EXECUTION_BLOCKED",
-  "TASK_RESULT:",
-  "DESIGN_SPEC_READY",
-  "CUSTOMER_VISION_READY",
-  "CUSTOMER_VERDICT:",
-  "REQUIREMENTS_READY",
-  "PLAN_DRAFT",
-  "CLARIFY",
-  "GAPS FOUND:",
-  "VERDICT:",
-] as const;
-
-function terminalAssistantMarker(text: string) {
-  return CHILD_SESSION_TERMINAL_MARKERS.find((marker) => text.includes(marker));
-}
-
-function hasTerminalAssistantMarker(text: string) {
-  return Boolean(terminalAssistantMarker(text));
-}
-
-function taskStatusFromTaskResult(text: string): TaskStatus | undefined {
-  const match = text.match(/STATUS:\s*(completed|blocked|failed)/i);
-  if (!match) return undefined;
-  return match[1].toLowerCase() === "completed" ? "done" : (match[1].toLowerCase() as "blocked" | "failed");
-}
-
-function summarizeTaskResult(text: string) {
-  const status = taskStatusFromTaskResult(text);
-  const summaryMatch = text.match(/SUMMARY:\s*(.+)/i);
-  const files = [...text.matchAll(/^\s*-\s*(.+\.[A-Za-z0-9]+)\s*$/gmi)].map((match) => match[1]).slice(0, 20);
-  return {
-    status,
-    summary: summaryMatch?.[1]?.trim() ?? "",
-    files,
-  };
-}
-
-function taskFile(ctx: RuntimeContext, runId: string) {
-  return safeRuntimePath(ctx, `team-runs/${runId}.tasks.json`);
-}
-
-function manifestFile(ctx: RuntimeContext, runId: string) {
-  return safeRuntimePath(ctx, `team-runs/${runId}.json`);
-}
-
-function progressFile(ctx: RuntimeContext, runId: string) {
-  return safeRuntimePath(ctx, `team-runs/${runId}.progress.jsonl`);
-}
-
-function problemsFile(ctx: RuntimeContext, runId: string) {
-  return safeRuntimePath(ctx, `team-runs/${runId}.problems.jsonl`);
-}
-
-function setToolProgress(toolContext: ToolProgressContext | undefined, title: string, metadata?: Record<string, unknown>) {
-  try {
-    toolContext?.metadata?.({ title, ...(metadata ? { metadata } : {}) });
-  } catch {
-    // Tool metadata is best-effort UI sugar; never fail workflow state updates.
-  }
-}
-
-function formatElapsed(milliseconds: number) {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
-}
-
-async function loadTasks(ctx: RuntimeContext, runId: string): Promise<TaskRecord[]> {
-  return readJson<TaskRecord[]>(taskFile(ctx, runId), []);
-}
-
-async function saveTasks(ctx: RuntimeContext, runId: string, tasks: TaskRecord[]) {
-  await writeJson(taskFile(ctx, runId), tasks);
-}
-
 export const CerebroPlugin: Plugin = async (input) => {
   const { worktree, directory, client } = input;
   const ctx = { worktree, directory };
   let sessionCheckDone = false;
   let autoUpdateScheduled = false;
 
-  // Serialises load→mutate→save cycles per run_id to prevent concurrent writes clobbering each other.
-  const taskLocks = new Map<string, Promise<unknown>>();
-  function serializeTask<T>(runId: string, fn: () => Promise<T>): Promise<T> {
-    const prev = taskLocks.get(runId) ?? Promise.resolve();
-    const next: Promise<T> = prev.then(fn, () => fn());
-    taskLocks.set(runId, next.then(() => {}, () => {}));
-    return next;
-  }
-
-  async function recordAgentResult(runId: string, agent: string, childSessionId: string, output: string, taskId?: string) {
-    const summary = summarizeTaskResult(output);
-    await appendJsonl(safeRuntimePath(ctx, `team-runs/${runId}.mailbox.jsonl`), {
-      at: now(),
-      type: "agent_result",
-      from: agent,
-      to: "cerebro",
-      child_session_id: childSessionId,
-      task_id: taskId,
-      status: summary.status ?? "unknown",
-      summary: summary.summary,
-      body: output,
-    });
-
-    if (!taskId) return summary;
-    await serializeTask(runId, async () => {
-      const tasks = await loadTasks(ctx, runId);
-      const taskRecord = tasks.find((task) => task.id === taskId);
-      if (!taskRecord) throw new Error(`Unknown task ${taskId}`);
-      if (summary.status) taskRecord.status = summary.status;
-      taskRecord.notes.push(`${now()} ${agent} returned ${summary.status ?? "unparsed"} from child session ${childSessionId}${summary.summary ? `: ${summary.summary}` : ""}`);
-      taskRecord.updated_at = now();
-      await saveTasks(ctx, runId, tasks);
-    });
-    return summary;
-  }
-
-  async function recordProgress(
-    runId: string,
-    event: {
-      phase: string;
-      message: string;
-      status?: ProgressStatus;
-      task_id?: string;
-      agent?: string;
-      child_session_id?: string;
-      detail?: string;
-    },
-    toolContext?: ToolProgressContext,
-  ) {
-    const record = { at: now(), status: event.status ?? "info", ...event };
-    await appendJsonl(progressFile(ctx, runId), record);
-    const titlePrefix = record.status === "completed" ? "✓" : record.status === "failed" ? "✗" : record.status === "blocked" ? "!" : "→";
-    setToolProgress(toolContext, `${titlePrefix} ${record.phase}: ${record.message}`, {
-      run_id: runId,
-      status: record.status,
-      task_id: record.task_id,
-      agent: record.agent,
-      child_session_id: record.child_session_id,
-    });
-    return record;
-  }
-
-  async function recordProblem(
-    runId: string,
-    problem: {
-      title: string;
-      severity?: ProblemSeverity;
-      status?: ProblemStatus;
-      source?: string;
-      task_id?: string;
-      agent?: string;
-      evidence?: string;
-      recommendation?: string;
-    },
-    toolContext?: ToolProgressContext,
-  ) {
-    const record = {
-      id: `problem-${randomUUID().replace(/-/g, "").slice(0, 12)}`,
-      at: now(),
-      severity: problem.severity ?? "warning",
-      status: problem.status ?? "open",
-      ...problem,
-    };
-    await appendJsonl(problemsFile(ctx, runId), record);
-    const prefix = record.severity === "blocker" ? "BLOCKER" : record.severity.toUpperCase();
-    setToolProgress(toolContext, `⚠ ${prefix}: ${record.title}`, {
-      run_id: runId,
-      problem_id: record.id,
-      severity: record.severity,
-      status: record.status,
-      task_id: record.task_id,
-      agent: record.agent,
-    });
-    await recordProgress(runId, {
-      phase: "problem",
-      status: record.severity === "blocker" ? "blocked" : record.severity === "error" ? "failed" : "info",
-      message: record.title,
-      task_id: record.task_id,
-      agent: record.agent,
-      detail: record.evidence,
-    }, toolContext).catch(() => undefined);
-    return record;
-  }
-
-  type DispatchChildArgs = {
-    run_id: string;
-    task_id?: string;
-    agent: string;
-    description: string;
-    prompt: string;
-    model_slot?: string;
-    no_reply?: boolean;
-  };
-
-  type CollectChildArgs = {
-    run_id: string;
-    child_session_id: string;
-    agent?: string;
-    task_id?: string;
-    limit?: number;
-    poll?: boolean;
-  };
-
-  async function dispatchAsyncChildSession(
-    args: DispatchChildArgs,
-    toolContext: { sessionID: string; directory: string } & ToolProgressContext,
-    dispatchType: "dispatch" | "dispatch_batch" = "dispatch",
-  ) {
-    await recordProgress(args.run_id, {
-      phase: dispatchType === "dispatch_batch" ? "batch dispatch" : "dispatch",
-      status: "started",
-      message: `${args.agent} — ${args.description}`,
-      task_id: args.task_id,
-      agent: args.agent,
-    }, toolContext);
-    await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
-      at: now(),
-      type: dispatchType,
-      from: "cerebro",
-      to: args.agent,
-      task_id: args.task_id,
-      description: args.description,
-    });
-    try {
-      if (!hasChildSessionClient(client)) throw new Error("OpenCode SDK client does not expose child session create/promptAsync methods");
-      const created = await client.session.create({
-        body: { parentID: toolContext.sessionID, title: `${args.agent}: ${args.description}` },
-        query: { directory: toolContext.directory },
-      });
-      const childID = childSessionID(created);
-      if (!childID) throw new Error("OpenCode SDK did not return a child session id");
-      await recordProgress(args.run_id, {
-        phase: "child session",
-        status: "running",
-        message: `${args.agent} started`,
-        task_id: args.task_id,
-        agent: args.agent,
-        child_session_id: childID,
-      }, toolContext);
-      await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
-        at: now(),
-        type: "child_session_started",
-        from: "cerebro",
-        to: args.agent,
-        task_id: args.task_id,
-        child_session_id: childID,
-        description: args.description,
-      });
-      const slots = modelSlots();
-      const selectedModel = args.model_slot ? slots[args.model_slot as keyof typeof slots] : undefined;
-      await client.session.promptAsync({
-        path: { id: childID },
-        query: { directory: toolContext.directory },
-        body: {
-          agent: args.agent,
-          ...(selectedModel ? { model: parseModelID(selectedModel) } : {}),
-          noReply: args.no_reply ?? true,
-          parts: [{ type: "text", text: args.prompt }],
-        },
-      });
-      return {
-        dispatched: true,
-        child_session_id: childID,
-        agent: args.agent,
-        task_id: args.task_id,
-        model: selectedModel || "agent-default",
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await recordProgress(args.run_id, {
-        phase: "dispatch",
-        status: "failed",
-        message: `${args.agent} dispatch failed`,
-        task_id: args.task_id,
-        agent: args.agent,
-        detail: message,
-      }, toolContext).catch(() => undefined);
-      await recordProblem(args.run_id, {
-        title: `${args.agent} dispatch failed`,
-        severity: "error",
-        source: "dispatch",
-        task_id: args.task_id,
-        agent: args.agent,
-        evidence: message,
-        recommendation: "Check child-session support and retry the task or fall back to direct agent mention.",
-      }, toolContext).catch(() => undefined);
-      await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
-        at: now(),
-        type: "dispatch_failed",
-        from: "cerebro",
-        to: args.agent,
-        task_id: args.task_id,
-        description: args.description,
-        error: message,
-      }).catch(() => undefined);
-      return {
-        dispatched: false,
-        agent: args.agent,
-        task_id: args.task_id,
-        fallback: `Use @${args.agent} with the prompt supplied to ${dispatchType}.`,
-        error: message,
-      };
-    }
-  }
-
-  async function collectChildSessionResult(
-    args: CollectChildArgs,
-    toolContext: { directory: string; abort?: AbortSignal } & ToolProgressContext,
-  ) {
-    const POLL_INTERVAL_MS = 2000;
-    const HEARTBEAT_MS = 10_000;
-    const HEARTBEAT_PROGRESS_LOG_MS = 60_000;
-    const MAX_POLL_MS = 30 * 60 * 1000;
-
-    try {
-      await recordProgress(args.run_id, {
-        phase: "collect",
-        status: args.poll ? "running" : "started",
-        message: `${args.agent ?? "child-session"} result`,
-        task_id: args.task_id,
-        agent: args.agent,
-        child_session_id: args.child_session_id,
-      }, toolContext);
-      if (!hasChildSessionClient(client) || typeof client.session.messages !== "function") {
-        throw new Error("OpenCode SDK client does not expose child session message listing");
-      }
-
-      let response: unknown;
-
-      if (args.poll) {
-        const startTime = Date.now();
-        let lastHeartbeatAt = 0;
-        let lastLoggedHeartbeatAt = 0;
-
-        while (true) {
-          if (toolContext.abort?.aborted) {
-            throw new Error("Task aborted during polling.");
-          }
-
-          response = await client.session.messages({
-            path: { id: args.child_session_id },
-            query: { directory: toolContext.directory, limit: 100 },
-          });
-
-          const currentOutput = assistantTextFromMessages(response);
-          if (currentOutput && hasTerminalAssistantMarker(currentOutput)) break;
-
-          const elapsed = Date.now() - startTime;
-          if (Date.now() - lastHeartbeatAt >= HEARTBEAT_MS) {
-            lastHeartbeatAt = Date.now();
-            const agent = args.agent ?? "child-session";
-            const markerHint = currentOutput ? "assistant output seen; waiting for terminal marker" : "waiting for assistant output";
-            setToolProgress(toolContext, `⏳ ${agent} still working (${formatElapsed(elapsed)}) — ${markerHint}`, {
-              run_id: args.run_id,
-              status: "running",
-              task_id: args.task_id,
-              agent: args.agent,
-              child_session_id: args.child_session_id,
-              elapsed_ms: elapsed,
-            });
-            if (Date.now() - lastLoggedHeartbeatAt >= HEARTBEAT_PROGRESS_LOG_MS) {
-              lastLoggedHeartbeatAt = Date.now();
-              await appendJsonl(progressFile(ctx, args.run_id), {
-                at: now(),
-                status: "running",
-                phase: "heartbeat",
-                message: `${agent} still working (${formatElapsed(elapsed)})`,
-                task_id: args.task_id,
-                agent: args.agent,
-                child_session_id: args.child_session_id,
-              }).catch(() => undefined);
-            }
-          }
-
-          if (Date.now() - startTime >= MAX_POLL_MS) {
-            await recordProgress(args.run_id, {
-              phase: "collect",
-              status: "blocked",
-              message: `${args.agent ?? "child-session"} timed out`,
-              task_id: args.task_id,
-              agent: args.agent,
-              child_session_id: args.child_session_id,
-            }, toolContext);
-            await recordProblem(args.run_id, {
-              title: `${args.agent ?? "child-session"} timed out while collecting result`,
-              severity: "blocker",
-              source: "cerebro_collect_result",
-              task_id: args.task_id,
-              agent: args.agent,
-              evidence: `No terminal marker after ${formatElapsed(MAX_POLL_MS)} for child session ${args.child_session_id}`,
-              recommendation: "Collect again, inspect the child session, or re-dispatch the task with a narrower prompt.",
-            }, toolContext).catch(() => undefined);
-            return {
-              collected: false,
-              child_session_id: args.child_session_id,
-              timed_out: true,
-              terminal_markers: CHILD_SESSION_TERMINAL_MARKERS,
-              message: "Polling timed out after 30 minutes. Call cerebro_collect_result again to retry, or escalate as EXECUTION_BLOCKED.",
-            };
-          }
-
-          await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-        }
-      } else {
-        response = await client.session.messages({
-          path: { id: args.child_session_id },
-          query: { directory: toolContext.directory, limit: args.limit ?? 20 },
-        });
-      }
-
-      const output = assistantTextFromMessages(response);
-      if (!output) {
-        return { collected: false, child_session_id: args.child_session_id, message: "No assistant result found yet." };
-      }
-      const agent = args.agent ?? "child-session";
-      const summary = await recordAgentResult(args.run_id, agent, args.child_session_id, output, args.task_id);
-      await recordProgress(args.run_id, {
-        phase: "collect",
-        status: summary.status === "blocked" ? "blocked" : summary.status === "failed" ? "failed" : "completed",
-        message: `${agent} returned ${terminalAssistantMarker(output) ?? "assistant output"}`,
-        task_id: args.task_id,
-        agent,
-        child_session_id: args.child_session_id,
-        detail: summary.summary,
-      }, toolContext);
-      return {
-        collected: true,
-        child_session_id: args.child_session_id,
-        agent,
-        task_id: args.task_id,
-        terminal_marker: terminalAssistantMarker(output) ?? "assistant_text",
-        parsed: summary,
-        output,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await recordProgress(args.run_id, {
-        phase: "collect",
-        status: "failed",
-        message: `${args.agent ?? "child-session"} collect failed`,
-        task_id: args.task_id,
-        agent: args.agent,
-        child_session_id: args.child_session_id,
-        detail: message,
-      }, toolContext).catch(() => undefined);
-      await recordProblem(args.run_id, {
-        title: `${args.agent ?? "child-session"} result collection failed`,
-        severity: "error",
-        source: "collect",
-        task_id: args.task_id,
-        agent: args.agent,
-        evidence: message,
-        recommendation: "Retry collection; if repeated, inspect or re-dispatch the child session.",
-      }, toolContext).catch(() => undefined);
-      await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
-        at: now(), type: "collect_failed", from: "cerebro", to: args.agent ?? "child-session",
-        child_session_id: args.child_session_id, task_id: args.task_id, error: message,
-      }).catch(() => undefined);
-      return {
-        collected: false,
-        child_session_id: args.child_session_id,
-        error: message,
-      };
-    }
-  }
+  // One mutex shared by every ledger writer (tools and engine) so load→mutate→save cycles never interleave.
+  const mutex = createTaskMutex();
+  const events = createEventRecorder(ctx, mutex);
+  const sessions = createSessionRunner(client, ctx, events);
+  const { recordProgress, recordProblem, recordAgentResult } = events;
 
   return {
     async event({ event }) {
@@ -941,7 +352,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           verification_commands: tool.schema.array(tool.schema.string().min(1)).optional(),
           depends_on: tool.schema.array(tool.schema.string()).optional(),
         },
-        execute: (args, toolContext) => serializeTask(args.run_id, async () => {
+        execute: (args, toolContext) => mutex.serialize(args.run_id, async () => {
           const tasks = await loadTasks(ctx, args.run_id);
           const id = `task-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
           const record: TaskRecord = {
@@ -989,7 +400,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           verification_result: tool.schema.enum(["PASS", "FAIL", "BLOCKED", "NOT RUN"]).optional(),
           verification_command: tool.schema.string().optional(),
         },
-        execute: (args, toolContext) => serializeTask(args.run_id, async () => {
+        execute: (args, toolContext) => mutex.serialize(args.run_id, async () => {
           const tasks = await loadTasks(ctx, args.run_id);
           const taskRecord = tasks.find((task) => task.id === args.task_id);
           if (!taskRecord) throw new Error(`Unknown task ${args.task_id}`);
@@ -1044,7 +455,7 @@ export const CerebroPlugin: Plugin = async (input) => {
         },
         async execute(args) {
           const record = { at: now(), ...args };
-          await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), record);
+          await appendJsonl(mailboxFile(ctx, args.run_id), record);
           return JSON.stringify(record, null, 2);
         },
       }),
@@ -1057,7 +468,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           limit: tool.schema.number().int().min(1).max(200).optional(),
         },
         async execute(args) {
-          const file = safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`);
+          const file = mailboxFile(ctx, args.run_id);
           if (!existsSync(file)) return "[]";
           const lines = (await readFile(file, "utf8")).split("\n");
           const records = lines
@@ -1179,7 +590,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           no_reply: tool.schema.boolean().optional(),
         },
         async execute(args, toolContext) {
-          return JSON.stringify(await dispatchAsyncChildSession(args, toolContext), null, 2);
+          return JSON.stringify(await sessions.dispatch(args, toolContext), null, 2);
         },
       }),
 
@@ -1203,7 +614,7 @@ export const CerebroPlugin: Plugin = async (input) => {
             message: `${args.requests.length} independent task(s)`,
           }, toolContext);
           const results = await Promise.all(args.requests.map((request) =>
-            dispatchAsyncChildSession({ run_id: args.run_id, ...request }, toolContext, "dispatch_batch")
+            sessions.dispatch({ run_id: args.run_id, ...request }, toolContext, "dispatch_batch")
           ));
           await recordProgress(args.run_id, {
             phase: "batch dispatch",
@@ -1236,7 +647,7 @@ export const CerebroPlugin: Plugin = async (input) => {
             task_id: args.task_id,
             agent: args.agent,
           }, toolContext);
-          await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+          await appendJsonl(mailboxFile(ctx, args.run_id), {
             at: now(),
             type: "dispatch_sync",
             from: "cerebro",
@@ -1262,7 +673,7 @@ export const CerebroPlugin: Plugin = async (input) => {
               agent: args.agent,
               child_session_id: childID,
             }, toolContext);
-            await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+            await appendJsonl(mailboxFile(ctx, args.run_id), {
               at: now(), type: "child_session_started", from: "cerebro", to: args.agent,
               task_id: args.task_id, child_session_id: childID, description: args.description,
             });
@@ -1310,7 +721,7 @@ export const CerebroPlugin: Plugin = async (input) => {
               evidence: message,
               recommendation: "Check mailbox for a child_session_started record; collect it if present, otherwise retry or narrow the task.",
             }, toolContext).catch(() => undefined);
-            await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+            await appendJsonl(mailboxFile(ctx, args.run_id), {
               at: now(), type: "agent_failed", from: args.agent, to: "cerebro", task_id: args.task_id, description: args.description, error: message,
             });
             return JSON.stringify({
@@ -1325,7 +736,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_collect_result: tool({
-        description: "Collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry. Pass poll: true to block until a terminal marker is seen (TASK_RESULT, DESIGN_SPEC_READY, PLAN_DRAFT, REQUIREMENTS_READY, EXECUTION_COMPLETE, etc.).",
+        description: "Collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry. Pass poll: true to block until a terminal marker is seen (TASK_RESULT, DESIGN_SPEC_READY, PLAN_DRAFT, REQUIREMENTS_READY, AUDIT_PASSED, etc.).",
         args: {
           run_id: tool.schema.string().min(1),
           child_session_id: tool.schema.string().min(1),
@@ -1335,7 +746,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           poll: tool.schema.boolean().optional(),
         },
         async execute(args, toolContext) {
-          return JSON.stringify(await collectChildSessionResult(args, toolContext), null, 2);
+          return JSON.stringify(await sessions.collect(args, toolContext), null, 2);
         },
       }),
 
@@ -1358,7 +769,7 @@ export const CerebroPlugin: Plugin = async (input) => {
             message: `${args.results.length} child session(s)`,
           }, toolContext);
           const results = await Promise.all(args.results.map((item) =>
-            collectChildSessionResult({ run_id: args.run_id, poll: true, ...item }, toolContext)
+            sessions.collect({ run_id: args.run_id, poll: true, ...item }, toolContext)
           ));
           await recordProgress(args.run_id, {
             phase: "batch collect",
