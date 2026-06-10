@@ -137,8 +137,11 @@ function verifyFreshInstall(tarballPath: string) {
     if (existsSync(path.join(projectDir, '.cerebro'))) fail('Plugin-only install unexpectedly wrote .cerebro/');
     if (existsSync(path.join(projectDir, 'AGENTS.md'))) fail('Plugin-only install unexpectedly wrote AGENTS.md');
 
-    console.log('Running installed doctor for plugin-only install...');
-    run('node', [cliPath, 'doctor', '--dir', projectDir], { cwd: packageDir });
+    // Do not run `doctor` for this plugin-only + --no-deps smoke. The temp project
+    // intentionally has no node_modules/open-xmen and no warmed OpenCode package
+    // cache, so `opencode debug config` cannot resolve the bare plugin entry.
+    // The installed plugin config hook is verified below directly from the
+    // packaged artifact.
 
     console.log('Running installed CLI runtime-files smoke install...');
     const runtimeProjectDir = path.join(tempRoot, 'project-runtime');
