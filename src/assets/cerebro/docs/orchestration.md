@@ -25,18 +25,21 @@ Cerebro classifies the request and owns user interaction. Consultants are invoke
 - **Beast**: gap review on all plans.
 - **Emma Frost**: HIGH risk, auth, billing, migration, or data-integrity plans.
 
-Cerebro writes the approved plan to `.cerebro/plans/{slug}.md` and creates task records, then hands off to Cyclops.
+Cerebro writes the approved plan to `.cerebro/plans/{slug}.md`, creates task records with `category`/`depends_on`/`files`/`verification_commands`, then invokes `cerebro_execute_workflow`.
 
-### Execution Layer (Cyclops)
+### Execution Engine (deterministic TypeScript)
 
-Cyclops receives the plan+task list and owns all execution:
+`cerebro_execute_workflow` is plugin runtime code, not an agent. No LLM decides scheduling, verification, or retry counts. The engine:
 
-1. Routes each task by `Category` to the correct worker chain.
-2. Respects `depends_on` — never dispatches a task whose dependencies are not yet done.
-3. Uses `cerebro_agent_task` for result-required worker calls; uses `cerebro_dispatch_agent` plus `cerebro_collect_result` only for async work.
-4. Tracks todos under `.cerebro/pending-todos/{run_id}/cyclops/`.
-5. After each TASK_RESULT, runs verification commands from the plan. Retries (max 2) on failure with exact output routed back to the worker.
-6. Returns `EXECUTION_COMPLETE` or `EXECUTION_BLOCKED`.
+1. Computes the dependency frontier — pending tasks whose `depends_on` tasks are all complete.
+2. Routes each task by `Category` to the correct worker chain (table below).
+3. Dispatches conflict-free frontier tasks in parallel batches; tasks sharing declared `Files` are never co-scheduled.
+4. Collects each worker's `TASK_RESULT` from its child session.
+5. Runs the task's `Verify` commands in a real shell, recording PASS/FAIL on the ledger with captured output — no model self-grading.
+6. Retries failed tasks at most twice, sending the responsible worker the exact failure output.
+7. Harvests each worker's `GOTCHAS:` section into `.cerebro/notepads/{run_id}/gotchas.md` and forwards it to later workers.
+8. Emits progress milestones for every phase transition and records blockers, failed verification, and runtime gaps to `.cerebro/team-runs/{run-id}.problems.jsonl`.
+9. Returns a structured result (`complete` / `blocked` / `timeout` / `aborted`) with task, verification, retry, and audit summaries. Re-invoking with the same run_id resumes from the task ledger.
 
 **Category routing table:**
 
@@ -50,11 +53,15 @@ Cyclops receives the plan+task list and owns all execution:
 
 ### Worker Layer
 
-Workers own their domain and return `TASK_RESULT` with files changed, tests run, and verification evidence. Workers do not re-dispatch to each other — that is Cyclops's job.
+Workers own their domain and return `TASK_RESULT` with files changed, tests run, and verification evidence. Workers do not re-dispatch to each other — sequencing belongs to the engine.
+
+### Audit Wave (Cyclops)
+
+When every task is done and verified, the engine dispatches Cyclops once as the final quality gate. Cyclops inspects the diff, cross-checks verification evidence against the plan's acceptance criteria, and hunts scope creep, missed work, and test gaps. It rules `AUDIT_PASSED` or `AUDIT_FAILED` with a structured JSON findings array; failures become problem records, and retriable findings re-queue their tasks for one more engine pass.
 
 ## Verification Standard
 
-Worker self-report is not enough. Cyclops collects child-session output into the mailbox/task ledger, runs the plan's verification commands after each TASK_RESULT, and routes failures back to the responsible worker with exact output. Final synthesis happens only after `cerebro_verify_pending` confirms task-scoped todos are clear or explicitly blocked.
+Worker self-report is not enough. The engine runs the plan's verification commands itself after each `TASK_RESULT`, records PASS/FAIL with captured output on the task ledger, and routes failures back to the responsible worker. Cyclops then independently audits the final state before the run can complete. Final synthesis happens only after `cerebro_verify_pending` confirms task-scoped todos are clear or explicitly blocked.
 
 ## Multi-Model Resilience
 

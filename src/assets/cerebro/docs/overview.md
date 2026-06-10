@@ -1,6 +1,6 @@
 # Cerebro OpenCode Runtime
 
-Cerebro is an OpenCode plugin/runtime that ports the original X-Men workflow into OpenCode while preserving the role names, cinematic command style, and high verification bar. It gives one project a repeatable planning and execution system using OpenCode-native files:
+Cerebro is an OpenCode plugin/runtime that pairs model intelligence with a deterministic TypeScript execution engine: agents plan, design, implement, and critique; the engine schedules, verifies, and retries; Cyclops audits the final result. Role names, cinematic command style, and the high verification bar are preserved. It gives one project a repeatable planning and execution system using OpenCode-native files:
 
 - `AGENTS.md` for repository-level Cerebro/OpenCode operating rules
 - `.opencode/agents/*.md` for specialist personas
@@ -32,7 +32,7 @@ Legacy `.claude/` files may exist as migration source or compatibility material,
 
 Package updates are npm-managed. Re-run `bunx open-xmen@latest install` to refresh the plugin config/cache without writing project runtime files. Use `install --with-runtime-files --reset` only when you intentionally want to refresh legacy managed `.opencode/`, `.cerebro/`, and `AGENTS.md` files.
 
-When `/to-me-my-x-men` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and Cyclops coordinates verified execution.
+When `/to-me-my-x-men` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and the workflow engine executes the plan deterministically — parallel dependency frontiers, shell verification, bounded retries — with Cyclops auditing the final result.
 
 ## Recommended Reading
 
