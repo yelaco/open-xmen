@@ -49,8 +49,8 @@ Usage:
   open-xmen models
 
 Install options:
-  --dir <path>           Project directory to install into (default: current directory)
-  -g, --global           Install into OpenCode global config instead of a project
+  --dir <path>           Project directory to install into instead of user OpenCode config
+  -g, --global           Install into OpenCode user config (default)
   --with-runtime-files   Also write managed .opencode/, .cerebro/, and AGENTS.md files
   --dry-run              Print planned writes without changing files
   --reset                Refresh managed runtime/template files when used with --with-runtime-files
@@ -80,9 +80,10 @@ Examples:
 function printInstallHelp() {
   console.log(`Usage: open-xmen install [--dir <path>] [--global] [--with-runtime-files] [--dry-run] [--reset] [--force] [--no-deps]
 
-By default, install only adds the Open X-Men plugin entry to opencode.jsonc; the plugin registers commands and agents at load time.
-Use --with-runtime-files to also write managed .opencode/, .cerebro/, and AGENTS.md files. Use --reset or --force with --with-runtime-files to refresh them.
-Use --global to add the plugin entry to the OpenCode global config instead of a project config.
+By default, install adds the Open X-Men plugin entry to the OpenCode user config; the plugin registers commands and agents at load time.
+Use --dir to write a project-local opencode.jsonc instead.
+Use --with-runtime-files to also write managed .opencode/, .cerebro/, and AGENTS.md files in the selected project. Use --reset or --force with --with-runtime-files to refresh them.
+--global is accepted as an explicit alias for the default user-config install.
 opencode.jsonc is updated atomically and an opencode.jsonc.bak backup is created when replacing an existing config.`);
 }
 
@@ -117,32 +118,33 @@ function install(args: string[]) {
     console.error("Missing value for --dir");
     return 1;
   }
-  const global = args.includes("--global") || args.includes("-g");
+  const explicitGlobal = args.includes("--global") || args.includes("-g");
   const runtimeFiles = args.includes("--with-runtime-files");
-  if (global && args.includes("--dir")) {
+  if (explicitGlobal && args.includes("--dir")) {
     console.error("Use either --global or --dir, not both");
     return 1;
   }
-  if (global && runtimeFiles) {
+  if (explicitGlobal && runtimeFiles) {
     console.error("--with-runtime-files is project-local and cannot be combined with --global");
     return 1;
   }
+  const userConfigInstall = !runtimeFiles && !args.includes("--dir");
 
   const options: InstallOptions = {
     dryRun: args.includes("--dry-run"),
     force: args.includes("--force"),
-    global,
+    global: userConfigInstall || explicitGlobal,
     reset: args.includes("--reset"),
     runtimeFiles,
     skipDeps: args.includes("--no-deps"),
-    target: global ? globalOpenCodeConfigDir() : path.resolve(targetArg || process.cwd()),
+    target: userConfigInstall || explicitGlobal ? globalOpenCodeConfigDir() : path.resolve(targetArg || process.cwd()),
   };
   const overwrite = options.force || options.reset;
   const planned: string[] = [];
 
   console.log(`Open X-Men ${options.dryRun ? "dry run" : "install"}`);
-  console.log(`${options.global ? "Global config" : "Target"}: ${options.target}`);
-  if (options.global) console.log("Mode: global plugin entry only");
+  console.log(`${options.global ? "OpenCode user config" : "Target"}: ${options.target}`);
+  if (options.global) console.log("Mode: user-config plugin entry only");
   else if (options.runtimeFiles && overwrite) console.log("Mode: plugin entry + refresh managed runtime files (--reset/--force)");
   else if (options.runtimeFiles) console.log("Mode: plugin entry + managed runtime files (existing files are skipped)");
   else console.log("Mode: plugin entry only (no .opencode/ or .cerebro/ files)");
@@ -172,7 +174,7 @@ function install(args: string[]) {
   if (options.skipDeps) console.log("Skipped OpenCode plugin cache warm-up (--no-deps)");
 
   console.log("open-xmen install: PASS");
-  console.log(`${options.global ? "Installed globally in" : "Installed into"} ${options.target}`);
+  console.log(`${options.global ? "Installed in OpenCode user config" : "Installed into"} ${options.target}`);
   if (!options.runtimeFiles) console.log("No .opencode/ or .cerebro/ files were written; commands and agents are provided by the plugin.");
   console.log("Next: restart OpenCode, then use `/cerebro-index`, `/cerebro-plan`, or `/to-me-my-x-men`.");
   return 0;

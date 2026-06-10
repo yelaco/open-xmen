@@ -8,8 +8,7 @@ import { runtimeAssetPaths } from '../src/runtime/index.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const packageName = 'open-xmen';
-const packageVersion = (JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as { version: string }).version;
-const expectedPackagePluginEntry = `${packageName}@${packageVersion}`;
+const expectedPackagePluginEntry = packageName;
 
 const requiredPackagedFiles = [
   'package.json',
@@ -38,6 +37,22 @@ const requiredModelSlots = [
   ['workers', 'openai/gpt-5.5', 'CEREBRO_MODEL_WORKERS'],
   ['fast', 'openai/gpt-5.4-mini-fast', 'CEREBRO_MODEL_FAST'],
   ['image', 'openai/gpt-image-2', 'CEREBRO_MODEL_IMAGE'],
+];
+const expectedResolvedCommands = ['cerebro-doctor', 'cerebro-index', 'cerebro-plan', 'cerebro-start-work', 'to-me-my-x-men'];
+const expectedResolvedAgents = [
+  'cerebro',
+  'legion',
+  'cypher',
+  'professor-x',
+  'wolverine',
+  'jean-grey',
+  'storm',
+  'cyclops',
+  'forge',
+  'nightcrawler',
+  'sage',
+  'beast',
+  'emma-frost',
 ];
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -110,6 +125,24 @@ function isRecord(value: JsonValue): value is { [key: string]: JsonValue } {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function verifyResolvedOpenCodeRuntime(projectDir: string, env: NodeJS.ProcessEnv) {
+  const output = run('opencode', ['debug', 'config'], { cwd: projectDir, env });
+  const config = JSON.parse(output) as JsonValue;
+  if (!isRecord(config)) fail('opencode debug config did not return a JSON object');
+
+  const command = config.command;
+  if (!isRecord(command)) fail('resolved OpenCode config is missing command registrations');
+  for (const name of expectedResolvedCommands) {
+    if (!isRecord(command[name])) fail(`resolved OpenCode config missing command ${name}`);
+  }
+
+  const agent = config.agent;
+  if (!isRecord(agent)) fail('resolved OpenCode config is missing agent registrations');
+  for (const name of expectedResolvedAgents) {
+    if (!isRecord(agent[name])) fail(`resolved OpenCode config missing agent ${name}`);
+  }
+}
+
 function verifyFreshInstall(tarballPath: string) {
   const tempRoot = mkdtempSync(path.join(tmpdir(), 'open-xmen-release-'));
 
@@ -118,6 +151,7 @@ function verifyFreshInstall(tarballPath: string) {
     const packageDir = path.join(tempRoot, 'package');
     const projectDir = path.join(tempRoot, 'project');
     const defaultProjectDir = path.join(tempRoot, 'project-default');
+    const opencodeConfigRoot = path.join(tempRoot, 'opencode-config');
     const opencodeCacheRoot = path.join(tempRoot, 'opencode-cache');
     const tarballTarget = path.join(tempRoot, path.basename(tarballPath));
     copyFileSync(tarballPath, tarballTarget);
@@ -132,15 +166,22 @@ function verifyFreshInstall(tarballPath: string) {
     if (!existsSync(cliPath)) fail(`Installed CLI is missing: ${cliPath}`);
 
     console.log('Running installed CLI default smoke install with cache warm-up...');
-    const isolatedCacheEnv = { ...process.env, XDG_CACHE_HOME: opencodeCacheRoot, OPEN_XMEN_SEED_OPENCODE_CACHE: '1' };
-    run('node', [cliPath, 'install', '--dir', defaultProjectDir], { cwd: packageDir, env: isolatedCacheEnv });
-    const defaultOpencodeConfig = readJsonc(path.join(defaultProjectDir, 'opencode.jsonc'));
+    const isolatedOpenCodeEnv = {
+      ...process.env,
+      XDG_CONFIG_HOME: opencodeConfigRoot,
+      XDG_CACHE_HOME: opencodeCacheRoot,
+      OPEN_XMEN_SEED_OPENCODE_CACHE: '1',
+    };
+    run('node', [cliPath, 'install'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv });
+    const defaultOpencodeConfig = readJsonc(path.join(opencodeConfigRoot, 'opencode', 'opencode.jsonc'));
     if (!isRecord(defaultOpencodeConfig) || !Array.isArray(defaultOpencodeConfig.plugin) || !defaultOpencodeConfig.plugin.includes(expectedPackagePluginEntry)) {
       fail(`Default opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
     }
+    if (existsSync(path.join(defaultProjectDir, 'opencode.jsonc'))) fail('Default install unexpectedly wrote project opencode.jsonc');
     if (existsSync(path.join(defaultProjectDir, '.opencode'))) fail('Default install unexpectedly wrote .opencode/');
     if (existsSync(path.join(defaultProjectDir, '.cerebro'))) fail('Default install unexpectedly wrote .cerebro/');
-    run('node', [cliPath, 'doctor', '--dir', defaultProjectDir], { cwd: packageDir, env: isolatedCacheEnv });
+    verifyResolvedOpenCodeRuntime(defaultProjectDir, isolatedOpenCodeEnv);
+    run('node', [cliPath, 'doctor', '--dir', defaultProjectDir], { cwd: packageDir, env: isolatedOpenCodeEnv });
 
     console.log('Running installed CLI plugin-only smoke install...');
     run('node', [cliPath, 'install', '--dir', projectDir, '--no-deps'], { cwd: packageDir });
@@ -152,18 +193,16 @@ function verifyFreshInstall(tarballPath: string) {
     if (existsSync(path.join(projectDir, '.opencode'))) fail('Plugin-only install unexpectedly wrote .opencode/');
     if (existsSync(path.join(projectDir, '.cerebro'))) fail('Plugin-only install unexpectedly wrote .cerebro/');
     if (existsSync(path.join(projectDir, 'AGENTS.md'))) fail('Plugin-only install unexpectedly wrote AGENTS.md');
+    verifyResolvedOpenCodeRuntime(projectDir, isolatedOpenCodeEnv);
 
-    // Do not run `doctor` for this plugin-only + --no-deps smoke. The temp project
-    // intentionally has no node_modules/open-xmen and no warmed OpenCode package
-    // cache, so `opencode debug config` is not required to resolve the package
-    // plugin entry in this path.
-    // The installed plugin config hook is verified below directly from the
-    // packaged artifact.
+    // Do not run `doctor` for this project-local + --no-deps smoke with a warmed
+    // cache; the default-install doctor path above covers the user-config flow
+    // and the runtime-files doctor path below covers managed project files.
 
     console.log('Running installed CLI runtime-files smoke install...');
     const runtimeProjectDir = path.join(tempRoot, 'project-runtime');
     mkdirSync(runtimeProjectDir, { recursive: true });
-    run('node', [cliPath, 'install', '--dir', runtimeProjectDir, '--with-runtime-files', '--no-deps'], { cwd: packageDir, env: isolatedCacheEnv });
+    run('node', [cliPath, 'install', '--dir', runtimeProjectDir, '--with-runtime-files', '--no-deps'], { cwd: packageDir, env: isolatedOpenCodeEnv });
 
     const runtimeOpencodeConfig = readJsonc(path.join(runtimeProjectDir, 'opencode.jsonc'));
     if (!isRecord(runtimeOpencodeConfig) || !Array.isArray(runtimeOpencodeConfig.plugin) || !runtimeOpencodeConfig.plugin.includes(expectedPackagePluginEntry)) {
@@ -209,7 +248,7 @@ function verifyFreshInstall(tarballPath: string) {
     `], { cwd: packageDir });
 
     console.log('Running installed doctor for runtime-files install...');
-    run('node', [cliPath, 'doctor', '--dir', runtimeProjectDir], { cwd: packageDir, env: isolatedCacheEnv });
+    run('node', [cliPath, 'doctor', '--dir', runtimeProjectDir], { cwd: packageDir, env: isolatedOpenCodeEnv });
 
     console.log('Running installed global install smoke test...');
     const globalConfigRoot = path.join(tempRoot, 'global-config');

@@ -3,6 +3,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, 
 import path from "node:path";
 
 const PACKAGE_NAME = "open-xmen";
+const PACKAGE_CACHE_TAG = "latest";
 const OPENCODE_INSTRUCTIONS = ["AGENTS.md", ".cerebro/cerebro-identity.md", ".cerebro/opencode/model-routing.md"];
 
 type JsonObject = { [key: string]: JsonValue };
@@ -59,16 +60,13 @@ export function warmOpenCodePluginCache(packageRoot: string) {
   }
   const home = process.env.HOME;
   if (!home) return;
-  let version = "latest";
-  const packageJson = readJsonFile(path.join(packageRoot, "package.json"));
-  if (isRecord(packageJson) && typeof packageJson.version === "string") version = packageJson.version;
   const cacheRoot = process.env.XDG_CACHE_HOME || path.join(home, ".cache");
-  const cacheDir = path.join(cacheRoot, "opencode", "packages", `${PACKAGE_NAME}@${version}`);
+  const cacheDir = path.join(cacheRoot, "opencode", "packages", `${PACKAGE_NAME}@${PACKAGE_CACHE_TAG}`);
   mkdirSync(cacheDir, { recursive: true });
   writeFileSync(path.join(cacheDir, "package.json"), `${JSON.stringify({
     name: `${PACKAGE_NAME}-cache`,
     private: true,
-    dependencies: { [PACKAGE_NAME]: version },
+    dependencies: { [PACKAGE_NAME]: PACKAGE_CACHE_TAG },
   }, null, 2)}\n`, "utf8");
   if (process.env.OPEN_XMEN_SEED_OPENCODE_CACHE === "1" && seedOpenCodePluginCache(cacheDir, packageRoot)) {
     console.log(`OpenCode plugin cache warmed: ${cacheDir}`);
@@ -111,8 +109,6 @@ function getPluginEntry() {
   const packageRoot = findPackageRoot(cliEntryPath);
   if (!packageRoot) return PACKAGE_NAME;
   if (isLocalDevelopmentCheckout(packageRoot)) return packageRoot;
-  const packageJson = readJsonFile(path.join(packageRoot, "package.json"));
-  if (isRecord(packageJson) && typeof packageJson.version === "string") return `${PACKAGE_NAME}@${packageJson.version}`;
   return PACKAGE_NAME;
 }
 
