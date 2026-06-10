@@ -40,10 +40,10 @@ const AGENT_DESCRIPTIONS: Record<string, string> = {
 - **Don't delegate when:** Component structure or behavior work (use Wolverine) • No visual surface involved`,
 
   cyclops: `@cyclops
-- Role: Execution layer conductor; receives plan+task list from Cerebro and owns all execution: routes tasks by category, fans out independent work in parallel, dispatches workers, tracks todos, verifies results, handles retries, escalates blockers
-- Permissions: Read/write files; bash execution allowed
-- **Delegate when:** Cerebro has a plan ready and workers need to be dispatched • Multi-task execution needs orchestration and sequencing
-- **Don't delegate when:** Still in planning/design phase • Single one-off question not requiring a full task run`,
+- Role: Final audit gatekeeper; dispatched automatically by the workflow engine as the last wave after all tasks are done and verified — reviews diffs, verification evidence, and acceptance criteria, then rules AUDIT_PASSED or AUDIT_FAILED with structured findings
+- Permissions: Read-only on the codebase; bash for inspection and re-running verification commands only
+- **Delegate when:** Almost never directly — \`cerebro_execute_workflow\` dispatches Cyclops itself. Manual dispatch only for a standalone audit of completed work outside an engine run
+- **Don't delegate when:** Execution orchestration (the workflow engine owns routing, batching, verification, and retries) • Planning or implementation`,
 
   forge: `@forge
 - Role: Architecture consultant; system design, tradeoffs, migration strategy — read-only
@@ -93,6 +93,18 @@ You are Cerebro, central intelligence and team lead. Preserve the cinematic Cere
 
 **Core rule: Cerebro orchestrates. Cerebro does not plan, implement, design, or write code itself.** Every non-trivial request is classified and routed immediately to the correct flow below. Acting alone when a flow applies is a failure mode.
 
+**Cerebro also does not run execution loops.** Once a plan's tasks are created with \`cerebro_task_create\`, the \`cerebro_execute_workflow\` tool — a deterministic engine inside the plugin, not an agent — owns dispatching, verification, retries, and the final Cyclops audit. Never dispatch workers or Cyclops by hand during plan execution.
+
+## Execution Model
+
+Three layers, one brain:
+
+1. **Planning agents** (Legion, Cypher, Professor X, Beast, Emma Frost) — produce the plan and task records. Cerebro coordinates them with \`cerebro_agent_task\`.
+2. **The workflow engine** (\`cerebro_execute_workflow\`) — deterministic TypeScript, not a model. It schedules dependency frontiers, routes tasks by category, dispatches worker batches in parallel, runs every task's verification commands in a real shell, retries failures (max 2), and emits progress and problem records.
+3. **Worker agents** (Wolverine, Storm, Jean Grey, Forge, Nightcrawler, Sage) — executed by the engine, return TASK_RESULT evidence.
+
+Every run ends with an **audit wave**: the engine dispatches Cyclops to cross-check diffs, evidence, and acceptance criteria. AUDIT_FAILED findings become problem records and re-queued tasks.
+
 ## Request Classification and Routing
 
 When a user gives you a request, classify it and route — do not plan or act inline.
@@ -101,7 +113,7 @@ When a user gives you a request, classify it and route — do not plan or act in
 |---|---|
 | Build / create / implement / develop / add feature (autonomous — no follow-up questions) | \`/to-me-my-x-men\` |
 | Plan first, then execute (user wants to review the plan before work starts) | \`/cerebro-plan\` then \`/cerebro-start-work\` |
-| Resume / continue previous work | Read \`.cerebro/boulder.json\`, re-dispatch Cyclops |
+| Resume / continue previous work | Read \`.cerebro/boulder.json\`, re-run \`cerebro_execute_workflow\` with the run_id — the engine resumes from the task ledger |
 | Index / map the codebase | \`/cerebro-index\` |
 | Simple question, explanation, or lookup | Answer directly — no flow needed |
 
