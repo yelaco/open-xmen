@@ -71,7 +71,7 @@ bunx open-xmen@latest install
 opencode .
 ```
 
-No setup slash command is required. Re-running the installer is safe: `~/.config/opencode/opencode.jsonc` (or `$XDG_CONFIG_HOME/opencode/opencode.jsonc`) is updated atomically with an `opencode.jsonc.bak` backup when it changes.
+No setup slash command is required. Re-running the installer is safe: `OPENCODE_CONFIG_DIR/opencode.jsonc` (or `~/.config/opencode/opencode.jsonc` / `$XDG_CONFIG_HOME/opencode/opencode.jsonc`) is updated atomically with an `opencode.jsonc.bak` backup when it changes.
 
 Useful installer flags:
 
@@ -121,7 +121,7 @@ open-xmen models
 
 - Omitting the subcommand defaults to `install`, matching `bunx open-xmen@latest install` behavior.
 - `--dry-run` prints planned writes and does not mutate the target config or project.
-- `--global` installs into the OpenCode user config; it is the default when `--dir` is omitted and `--with-runtime-files` is not set.
+- `--global` installs into the OpenCode user config; it is the default when `--dir` is omitted and `--with-runtime-files` is not set. The user config path honors `OPENCODE_CONFIG_DIR` first, then `XDG_CONFIG_HOME`, then `~/.config/opencode`.
 - `--with-runtime-files` writes the legacy managed runtime files; without it, no `.opencode/` or `.cerebro/` files are created.
 - `--reset` / `--force` refresh existing managed files when `--with-runtime-files` is used.
 - `opencode.jsonc` writes are atomic via `opencode.jsonc.tmp` and create `opencode.jsonc.bak` before replacing an existing config.

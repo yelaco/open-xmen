@@ -152,6 +152,7 @@ function verifyFreshInstall(tarballPath: string) {
     const projectDir = path.join(tempRoot, 'project');
     const defaultProjectDir = path.join(tempRoot, 'project-default');
     const opencodeConfigRoot = path.join(tempRoot, 'opencode-config');
+    const opencodeConfigDir = path.join(tempRoot, 'opencode-config-dir');
     const opencodeCacheRoot = path.join(tempRoot, 'opencode-cache');
     const tarballTarget = path.join(tempRoot, path.basename(tarballPath));
     copyFileSync(tarballPath, tarballTarget);
@@ -168,12 +169,13 @@ function verifyFreshInstall(tarballPath: string) {
     console.log('Running installed CLI default smoke install with cache warm-up...');
     const isolatedOpenCodeEnv = {
       ...process.env,
+      OPENCODE_CONFIG_DIR: opencodeConfigDir,
       XDG_CONFIG_HOME: opencodeConfigRoot,
       XDG_CACHE_HOME: opencodeCacheRoot,
       OPEN_XMEN_SEED_OPENCODE_CACHE: '1',
     };
     run('node', [cliPath, 'install'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv });
-    const defaultOpencodeConfig = readJsonc(path.join(opencodeConfigRoot, 'opencode', 'opencode.jsonc'));
+    const defaultOpencodeConfig = readJsonc(path.join(opencodeConfigDir, 'opencode.jsonc'));
     if (!isRecord(defaultOpencodeConfig) || !Array.isArray(defaultOpencodeConfig.plugin) || !defaultOpencodeConfig.plugin.includes(expectedPackagePluginEntry)) {
       fail(`Default opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
     }

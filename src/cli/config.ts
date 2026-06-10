@@ -17,6 +17,7 @@ export type UpdateOpenCodeConfigOptions = {
 };
 
 export function globalOpenCodeConfigDir() {
+  if (process.env.OPENCODE_CONFIG_DIR) return path.resolve(process.env.OPENCODE_CONFIG_DIR);
   const configHome = process.env.XDG_CONFIG_HOME || (process.env.HOME ? path.join(process.env.HOME, ".config") : undefined);
   if (!configHome) throw new Error("Cannot resolve OpenCode global config directory: HOME is not set");
   return path.join(configHome, "opencode");
