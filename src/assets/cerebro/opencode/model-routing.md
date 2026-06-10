@@ -7,7 +7,7 @@ This runtime uses one canonical role-slot table. Agent frontmatter, `cerebro_mod
 | Slot | Default model | Variant | Agents |
 |---|---|---|---|
 | `orchestrator` | `openai/gpt-5.5` | medium | Cerebro |
-| `conductor` | `openai/gpt-5.5` | medium | Cyclops |
+| `auditor` | `openai/gpt-5.5` | high | Cyclops |
 | `planner` | `openai/gpt-5.5` | high | Professor X, Beast, Forge, Emma Frost |
 | `design` | `openai/gpt-5.5` | high | Jean Grey |
 | `analyst` | `openai/gpt-5.4` | high | Legion, Cypher |
@@ -22,7 +22,7 @@ Each generated agent has a primary model and `options.model_fallbacks`. If the p
 | Agent | Slot | Primary | Fallbacks |
 |---|---|---|---|
 | Cerebro | `orchestrator` | `openai/gpt-5.5` | `anthropic/claude-sonnet-4-6` |
-| Cyclops | `conductor` | `openai/gpt-5.5` | `anthropic/claude-sonnet-4-6` |
+| Cyclops | `auditor` | `openai/gpt-5.5` | `anthropic/claude-opus-4-8` |
 | Professor X | `planner` | `openai/gpt-5.5` | `anthropic/claude-opus-4-8` |
 | Beast | `planner` | `openai/gpt-5.5` | `anthropic/claude-opus-4-8` |
 | Forge | `planner` | `openai/gpt-5.5` | `anthropic/claude-opus-4-8` |
@@ -37,10 +37,10 @@ Each generated agent has a primary model and `options.model_fallbacks`. If the p
 
 ## Environment Overrides
 
-Override slots with these variables. Legacy variables (`CEREBRO_MODEL_FRONTIER`, `CEREBRO_MODEL_STRONG`, `CEREBRO_MODEL_CODING`) are accepted only as migration fallbacks by the plugin; new installs should use the canonical names below.
+Override slots with these variables. Legacy variables (`CEREBRO_MODEL_FRONTIER`, `CEREBRO_MODEL_STRONG`, `CEREBRO_MODEL_CODING`, and the pre-0.3.0 `CEREBRO_MODEL_CONDUCTOR`) are accepted only as migration fallbacks by the plugin; new installs should use the canonical names below.
 
 - `CEREBRO_MODEL_ORCHESTRATOR`
-- `CEREBRO_MODEL_CONDUCTOR`
+- `CEREBRO_MODEL_AUDITOR`
 - `CEREBRO_MODEL_PLANNER`
 - `CEREBRO_MODEL_DESIGN`
 - `CEREBRO_MODEL_ANALYST`
@@ -50,4 +50,4 @@ Override slots with these variables. Legacy variables (`CEREBRO_MODEL_FRONTIER`,
 
 ## Routing Policy
 
-Use `orchestrator` for Cerebro command interpretation, `conductor` for Cyclops execution coordination, `planner`/`design` for outputs that gate downstream quality, `analyst` for customer and requirements work, `workers` for implementation, and `fast` for bounded retrieval/search.
+Use `orchestrator` for Cerebro command interpretation, `auditor` for the final Cyclops audit wave, `planner`/`design` for outputs that gate downstream quality, `analyst` for customer and requirements work, `workers` for implementation, and `fast` for bounded retrieval/search. Execution scheduling itself needs no model — the workflow engine is deterministic TypeScript.

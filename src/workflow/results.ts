@@ -51,8 +51,6 @@ export function assistantTextFromMessages(result: unknown) {
 }
 
 export const CHILD_SESSION_TERMINAL_MARKERS = [
-  "EXECUTION_COMPLETE",
-  "EXECUTION_BLOCKED",
   "AUDIT_PASSED",
   "AUDIT_FAILED",
   "TASK_RESULT:",

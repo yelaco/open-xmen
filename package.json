@@ -1,7 +1,7 @@
 {
   "name": "open-xmen",
-  "version": "0.2.8",
-  "description": "Cerebro/X-Men orchestration workflow for OpenCode.",
+  "version": "0.3.0",
+  "description": "Cerebro/X-Men workflow for OpenCode: agent planning + deterministic TypeScript execution engine + Cyclops audit.",
   "type": "module",
   "bin": {
     "open-xmen": "dist/cli.js"

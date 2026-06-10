@@ -1,30 +1,38 @@
 # Open X-Men — Cerebro for OpenCode
 
-A reusable OpenCode plugin/template that ports the original Claude Code Cerebro/X-Men workflow into the OpenCode ecosystem while preserving the parts that matter:
+Model-as-brain, engine-as-conductor. Open X-Men gives OpenCode a complete planning-and-execution system: X-Men-themed agents handle judgment — requirements, planning, design, implementation, critique — while a deterministic TypeScript workflow engine inside the plugin handles process — dependency scheduling, parallel dispatch, shell verification, bounded retries. Cyclops closes every run with an independent audit.
 
-- `.cerebro/` runtime state
-- `/cerebro-index`
-- `/cerebro-plan`
-- `/cerebro-start-work`
-- `/to-me-my-x-men`
-- Cerebro and the X-Men role names
-
-Cerebro coordinates. OpenCode agents execute. The workflow keeps the dramatic X-Men soul, but no longer depends on Claude Code native team APIs.
+**No LLM decides whether your tests passed. The engine ran them.**
 
 ---
 
-## What Changed
+## Architecture
 
-The old Claude workflow used `.claude/agents`, `.claude/commands`, hooks, and native team tools such as `TeamCreate`, `TaskCreate`, `TaskUpdate`, and `SendMessage`.
+```text
+Cerebro (primary agent — intent gate, user interaction)
+  │
+  ├── Planning agents ······ Legion, Cypher, Professor X, Beast, Emma Frost
+  │     produce the approved plan + machine-scheduled task records
+  │
+  ├── cerebro_execute_workflow (deterministic TypeScript — one tool call)
+  │     loop: dependency frontier → category routing → parallel worker batch
+  │           → collect TASK_RESULT → run Verify commands in a shell
+  │           → PASS: verified / FAIL: retry (max 2) → live progress + problem records
+  │
+  ├── Worker agents ········· Wolverine, Storm, Jean Grey, Forge, Nightcrawler, Sage
+  │     dispatched by the engine, return TASK_RESULT evidence
+  │
+  └── Audit wave ············ Cyclops inspects diff + evidence + acceptance criteria
+        AUDIT_PASSED → done · AUDIT_FAILED → findings become problems + re-queued tasks
+```
 
-The OpenCode port uses:
+Three principles:
 
-- `.opencode/agents/*.md` — OpenCode-native Cerebro role agents (installed into target projects)
-- `.opencode/commands/*.md` — preserved Cerebro slash commands (installed into target projects)
-- `open-xmen` package plugin entry — wired into `opencode.jsonc` by `open-xmen install`
-- `src/index.ts` — reusable plugin implementation (hooks, tools, model-slot injection)
-- Cerebro custom tools for run state, tasks, mailbox, checkpoints, model slots, and pending-todo checks
-- `AGENTS.md` and `.cerebro/cerebro-identity.md` — OpenCode instruction surface when runtime files are installed
+- **Agents think.** Judgment-heavy work — what to build, how to design it, whether the plan has gaps — belongs to models.
+- **The engine conducts.** Scheduling, file-conflict-aware parallelism, verification, and retry policy are plain TypeScript: deterministic, resumable from the task ledger, visible as live progress.
+- **The auditor signs off.** Cyclops independently cross-checks the finished run before it can be declared complete.
+
+Everything that matters is preserved: `.cerebro/` runtime state, the four slash commands, and the X-Men role names.
 
 ---
 
@@ -35,7 +43,7 @@ Open X-Men uses canonical role-based model slots. Agent frontmatter, `cerebro_mo
 | Slot | Default model | Roles |
 |---|---|---|
 | `orchestrator` | `openai/gpt-5.5` | Cerebro |
-| `conductor` | `openai/gpt-5.5` | Cyclops |
+| `auditor` | `openai/gpt-5.5` | Cyclops |
 | `planner` | `openai/gpt-5.5` | Professor X, Beast, Forge, Emma Frost |
 | `design` | `openai/gpt-5.5` | Jean Grey |
 | `analyst` | `openai/gpt-5.4` | Legion, Cypher |
@@ -47,7 +55,7 @@ Override with environment variables if your available models change:
 
 ```bash
 export CEREBRO_MODEL_ORCHESTRATOR="openai/gpt-5.5"
-export CEREBRO_MODEL_CONDUCTOR="openai/gpt-5.5"
+export CEREBRO_MODEL_AUDITOR="openai/gpt-5.5"
 export CEREBRO_MODEL_PLANNER="openai/gpt-5.5"
 export CEREBRO_MODEL_DESIGN="openai/gpt-5.5"
 export CEREBRO_MODEL_ANALYST="openai/gpt-5.4"
@@ -56,7 +64,7 @@ export CEREBRO_MODEL_FAST="openai/gpt-5.4-mini-fast"
 export CEREBRO_MODEL_IMAGE="openai/gpt-image-2"
 ```
 
-Legacy `CEREBRO_MODEL_FRONTIER`, `CEREBRO_MODEL_STRONG`, and `CEREBRO_MODEL_CODING` are accepted as migration fallbacks, but new setups should use role slots.
+Legacy `CEREBRO_MODEL_FRONTIER`, `CEREBRO_MODEL_STRONG`, `CEREBRO_MODEL_CODING`, and the pre-0.3.0 `CEREBRO_MODEL_CONDUCTOR` are accepted as migration fallbacks, but new setups should use role slots.
 
 ---
 
@@ -142,8 +150,8 @@ open-xmen models
 |---|---|
 | `/cerebro-index` | Build `.cerebro/project-context.md` using Nightcrawler, Sage, Forge, and Beast. |
 | `/cerebro-plan [task]` | Interview-first planning with Professor X, Beast, and Emma Frost validation. |
-| `/cerebro-start-work` | Execute or resume the latest Cerebro plan through Cyclops coordination. |
-| `/to-me-my-x-men [task]` | Autonomous full-team mode with Legion + Cypher intent consult and final Legion acceptance. |
+| `/cerebro-start-work` | Execute or resume the latest plan through the deterministic workflow engine, with a final Cyclops audit. |
+| `/to-me-my-x-men [task]` | Autonomous full-team mode with Legion + Cypher intent consult and final Legion acceptance — engine-executed, Cyclops-audited. |
 
 ---
 
@@ -155,7 +163,7 @@ open-xmen models
 | Legion | Customer / product-owner proxy | `openai/gpt-5.4` |
 | Cypher | Requirements analyst | `openai/gpt-5.4` |
 | Professor X | Strategic planner | `openai/gpt-5.5` |
-| Cyclops | Execution layer conductor with parallel fan-out and post-delegation verification gates | `openai/gpt-5.5` |
+| Cyclops | Final audit gatekeeper — reviews diffs, evidence, and acceptance criteria after the engine finishes | `openai/gpt-5.5` |
 | Wolverine | Implementation worker (code, tests, scripts) | `openai/gpt-5.5` |
 | Jean Grey | Design strategist (component specs, UX flows) | `openai/gpt-5.5` |
 | Storm | Visual engineering (CSS, styling, accessibility) | `openai/gpt-5.5` |

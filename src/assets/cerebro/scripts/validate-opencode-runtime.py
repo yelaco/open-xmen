@@ -29,7 +29,7 @@ REQUIRED_COMMANDS = {
 MODEL_PATTERN = re.compile(r"(?:openai|anthropic|minimax)/[A-Za-z0-9._/-]+")
 REQUIRED_SLOTS = {
     "orchestrator": ("openai/gpt-5.5", "CEREBRO_MODEL_ORCHESTRATOR"),
-    "conductor": ("openai/gpt-5.5", "CEREBRO_MODEL_CONDUCTOR"),
+    "auditor": ("openai/gpt-5.5", "CEREBRO_MODEL_AUDITOR"),
     "planner": ("openai/gpt-5.5", "CEREBRO_MODEL_PLANNER"),
     "design": ("openai/gpt-5.5", "CEREBRO_MODEL_DESIGN"),
     "analyst": ("openai/gpt-5.4", "CEREBRO_MODEL_ANALYST"),

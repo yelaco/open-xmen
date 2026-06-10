@@ -13,7 +13,7 @@ Open every Cerebro command with a short cinematic announcement, then move quickl
 - `/cerebro-index` — build or refresh `.cerebro/project-context.md`.
 - `/cerebro-plan [task]` — interview-first planning; write approved plans to `.cerebro/plans/`.
 - `/cerebro-start-work` — execute or resume the latest `.cerebro/plans/*.md`.
-- `/to-me-my-x-men [task]` — autonomous full-team mode; Legion/Cypher for product-shaped work, Cyclops conducts execution.
+- `/to-me-my-x-men [task]` — autonomous full-team mode; Legion/Cypher for product-shaped work, the workflow engine executes and Cyclops audits.
 
 ## Runtime
 
@@ -39,6 +39,7 @@ Use the Cerebro custom tools when available:
 - `cerebro_problem_list`
 - `cerebro_mailbox_send`
 - `cerebro_mailbox_read`
+- `cerebro_execute_workflow`
 - `cerebro_dispatch_agent`
 - `cerebro_dispatch_batch`
 - `cerebro_agent_task`
@@ -64,7 +65,7 @@ Do not begin any new work until the user responds.
 - **Legion** (`legion`) — customer/product-owner proxy; owns WANT and final acceptance.
 - **Cypher** (`cypher`) — business analyst; turns intent into requirements and acceptance criteria.
 - **Professor X** (`professor-x`) — strategic planner and product brief author.
-- **Cyclops** (`cyclops`) — execution layer conductor; receives the plan+task list from Cerebro, fans out independent tasks in parallel, routes tasks to workers by category, tracks todos, verifies results, handles retries, and escalates blockers.
+- **Cyclops** (`cyclops`) — final audit gatekeeper; dispatched by the workflow engine after all tasks are done and verified; reviews diffs, verification evidence, and acceptance criteria, then rules AUDIT_PASSED or AUDIT_FAILED with structured findings.
 - **Wolverine** (`wolverine`) — sole implementation specialist; backend and frontend logic, component structure, tests, scripts, bug fixes.
 - **Jean Grey** (`jean-grey`) — design strategist; component specs, UX flows, design system decisions.
 - **Storm** (`storm`) — visual engineering; CSS/styling, animations, design tokens, responsive behavior, accessibility styling.
@@ -80,7 +81,7 @@ OpenCode does not provide Claude Code native `TeamCreate`, `TaskCreate`, `TaskUp
 
 1. Start a run with `cerebro_run_start`.
 2. Create and update tasks with `cerebro_task_create`, `cerebro_task_list`, and `cerebro_task_update`.
-3. Use `cerebro_agent_task` for one required result. Use `cerebro_dispatch_batch` followed by `cerebro_collect_batch_results` when Cyclops has multiple independent ready tasks. Use `cerebro_dispatch_agent` followed by `cerebro_collect_result(poll: true)` for individual async child sessions and multi-turn conductors (Cyclops).
+3. Use `cerebro_agent_task` for one required consultation result during planning. Plan execution belongs to `cerebro_execute_workflow` — the deterministic engine schedules, dispatches, collects, verifies, retries, and audits; do not hand-roll dispatch loops. The low-level dispatch/collect tools exist for recovery and one-off async consultations only.
 4. Record cross-agent decisions with `cerebro_mailbox_send`.
 5. Emit visible milestones with `cerebro_progress` at major phase changes; use `cerebro_progress_read` if the user asks what is happening.
 6. Record workflow problems with `cerebro_problem_report` whenever a blocker, failed verification, weak evidence, runtime gap, or UX issue appears; use `cerebro_problem_list` as the improvement backlog.
@@ -103,7 +104,7 @@ This keeps the user informed during long executions where tool calls are opaque 
 - Ask before destructive, irreversible, production, credentialed, billing, legal, data migration, or git-history actions.
 - Wolverine and Storm must maintain task-scoped todos and return `TASK_RESULT` evidence.
 - For UI work: Jean Grey designs first, Wolverine implements component structure, Storm applies the visual layer — in that order.
-- Cyclops conducts all execution: routes tasks to workers, fans out independent dependency-frontier tasks in parallel, collects each child-session result through Cerebro tools, verifies each TASK_RESULT immediately after collection, retries on failure (max 2 per task), and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
+- The workflow engine (`cerebro_execute_workflow`) conducts all execution: deterministic category routing, parallel dependency frontiers, shell verification after every TASK_RESULT, max-2 retries, then a Cyclops audit wave. An AUDIT_FAILED verdict blocks completion until its findings are addressed.
 - Users should not have to inspect mailbox files. Use progress tool calls and concise confirmations to show what is running, what passed, what failed, and what is next.
 - If something is confusing, slow, or brittle in the workflow, add it to the problem list rather than only mentioning it in chat.
 - Final reports must include files changed, tests/verification run, unresolved issues, and checkpoint paths.
