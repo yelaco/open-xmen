@@ -51,6 +51,8 @@ import {
 } from "./workflow/results.js";
 import { createEventRecorder } from "./workflow/events.js";
 import { createSessionRunner } from "./workflow/sessions.js";
+import { executeWorkflow } from "./workflow/engine.js";
+import { runVerificationCommands } from "./workflow/verify.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
 const RISKS = [...CEREBRO_RISKS] as const;
@@ -581,8 +583,34 @@ export const CerebroPlugin: Plugin = async (input) => {
         },
       }),
 
+      cerebro_execute_workflow: tool({
+        description: "Run the deterministic Cerebro workflow engine for a run: schedules the dependency frontier, routes tasks by category, dispatches/collects worker child sessions, runs each task's verification commands in a shell, retries failures, and finishes with a Cyclops audit wave. Blocks until complete/blocked. Re-invoke with the same run_id to resume — the engine skips tasks that are already done and verified.",
+        args: {
+          run_id: tool.schema.string().min(1),
+          max_parallel: tool.schema.number().int().min(1).max(8).optional().describe("Max worker sessions per wave (default 4)"),
+          max_retries: tool.schema.number().int().min(0).max(5).optional().describe("Max retries per task after the first attempt (default 2)"),
+          stop_on_blocker: tool.schema.boolean().optional().describe("Stop the run when a task blocks instead of finishing the rest (default true)"),
+          audit: tool.schema.boolean().optional().describe("Dispatch the final Cyclops audit wave (default true)"),
+          verification_timeout_seconds: tool.schema.number().int().min(10).max(3600).optional().describe("Per-verification-command timeout (default 600)"),
+          overall_timeout_minutes: tool.schema.number().int().min(5).max(720).optional().describe("Overall wall-clock budget for this invocation (default 360)"),
+          plan_path: tool.schema.string().optional().describe("Repo-relative path to the active plan, passed to workers and the auditor as context"),
+        },
+        async execute(args, toolContext) {
+          const result = await executeWorkflow(
+            { ctx, sessions, verifier: runVerificationCommands, events, mutex },
+            args,
+            toolContext,
+          );
+          return {
+            title: `workflow ${result.status}: ${result.tasks.verified + result.tasks.done}/${result.tasks.total} task(s) complete${result.audit ? `, audit ${result.audit.verdict}` : ""}`,
+            output: JSON.stringify(result, null, 2),
+            metadata: result,
+          };
+        },
+      }),
+
       cerebro_dispatch_agent: tool({
-        description: "Dispatch an asynchronous OpenCode child session for a Cerebro agent and record the dispatch in the mailbox. Use for fire-and-collect flows; for parallel fan-out prefer cerebro_dispatch_batch.",
+        description: "Low-level: dispatch an asynchronous OpenCode child session for a Cerebro agent and record the dispatch in the mailbox. Prefer cerebro_execute_workflow for plan execution; use this for one-off fire-and-collect flows and recovery.",
         args: {
           run_id: tool.schema.string().min(1),
           agent: tool.schema.enum(CEREBRO_AGENTS).describe("Cerebro agent name, e.g. wolverine, nightcrawler, professor-x"),
@@ -597,7 +625,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_dispatch_batch: tool({
-        description: "Dispatch multiple independent Cerebro worker child sessions asynchronously in one call for Cyclops-style parallel fan-out. Collect each child session with cerebro_collect_batch_results or cerebro_collect_result.",
+        description: "Low-level: dispatch multiple independent Cerebro child sessions asynchronously in one call for parallel consultations. Prefer cerebro_execute_workflow for plan execution. Collect each child session with cerebro_collect_batch_results or cerebro_collect_result.",
         args: {
           run_id: tool.schema.string().min(1),
           requests: tool.schema.array(tool.schema.object({
@@ -738,7 +766,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_collect_result: tool({
-        description: "Collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry. Pass poll: true to block until a terminal marker is seen (TASK_RESULT, DESIGN_SPEC_READY, PLAN_DRAFT, REQUIREMENTS_READY, AUDIT_PASSED, etc.).",
+        description: "Low-level: collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry. Pass poll: true to block until a terminal marker is seen (TASK_RESULT, DESIGN_SPEC_READY, PLAN_DRAFT, REQUIREMENTS_READY, AUDIT_PASSED, etc.). The workflow engine collects its own workers; use this for recovery and one-off dispatches.",
         args: {
           run_id: tool.schema.string().min(1),
           child_session_id: tool.schema.string().min(1),

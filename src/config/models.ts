@@ -1,6 +1,6 @@
 export const CEREBRO_MODEL_SLOT_KEYS = [
   "orchestrator",
-  "conductor",
+  "auditor",
   "planner",
   "design",
   "analyst",
@@ -13,7 +13,7 @@ export type CerebroModelSlot = (typeof CEREBRO_MODEL_SLOT_KEYS)[number];
 
 export const DEFAULT_MODEL_SLOTS: Record<CerebroModelSlot, string> = {
   orchestrator: "openai/gpt-5.5",
-  conductor: "openai/gpt-5.5",
+  auditor: "openai/gpt-5.5",
   planner: "openai/gpt-5.5",
   design: "openai/gpt-5.5",
   analyst: "openai/gpt-5.4",
@@ -24,7 +24,7 @@ export const DEFAULT_MODEL_SLOTS: Record<CerebroModelSlot, string> = {
 
 export const MODEL_SLOT_ENV: Record<CerebroModelSlot, string> = {
   orchestrator: "CEREBRO_MODEL_ORCHESTRATOR",
-  conductor: "CEREBRO_MODEL_CONDUCTOR",
+  auditor: "CEREBRO_MODEL_AUDITOR",
   planner: "CEREBRO_MODEL_PLANNER",
   design: "CEREBRO_MODEL_DESIGN",
   analyst: "CEREBRO_MODEL_ANALYST",
@@ -35,7 +35,8 @@ export const MODEL_SLOT_ENV: Record<CerebroModelSlot, string> = {
 
 const LEGACY_MODEL_SLOT_ENV: Partial<Record<CerebroModelSlot, string[]>> = {
   orchestrator: ["CEREBRO_MODEL_FRONTIER"],
-  conductor: ["CEREBRO_MODEL_FRONTIER"],
+  // CEREBRO_MODEL_CONDUCTOR is the pre-0.3.0 name for this slot; still honored.
+  auditor: ["CEREBRO_MODEL_CONDUCTOR", "CEREBRO_MODEL_FRONTIER"],
   planner: ["CEREBRO_MODEL_FRONTIER", "CEREBRO_MODEL_STRONG"],
   design: ["CEREBRO_MODEL_FRONTIER"],
   analyst: ["CEREBRO_MODEL_STRONG"],
@@ -46,7 +47,7 @@ const LEGACY_MODEL_SLOT_ENV: Partial<Record<CerebroModelSlot, string[]>> = {
 
 export const AGENT_MODEL_SLOTS = {
   cerebro: "orchestrator",
-  cyclops: "conductor",
+  cyclops: "auditor",
   "professor-x": "planner",
   beast: "planner",
   forge: "planner",
@@ -62,7 +63,7 @@ export const AGENT_MODEL_SLOTS = {
 
 export const DEFAULT_AGENT_FALLBACKS: Partial<Record<keyof typeof AGENT_MODEL_SLOTS, string[]>> = {
   cerebro: ["anthropic/claude-sonnet-4-6"],
-  cyclops: ["anthropic/claude-sonnet-4-6"],
+  cyclops: ["anthropic/claude-opus-4-8"],
   "professor-x": ["anthropic/claude-opus-4-8"],
   beast: ["anthropic/claude-opus-4-8"],
   forge: ["anthropic/claude-opus-4-8"],

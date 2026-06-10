@@ -29,7 +29,7 @@ const allowedTopLevelFiles = new Set(['package.json', 'README.md']);
 const forbiddenPackagedPathPattern = /(^|\/)\.env(\.|$|\/)|secret|credential|token|private[-_]?key|node_modules|__pycache__|\.pyc$|\.opencode\/|\.cerebro\/|\.claude\/|\.omx\/|\.sisyphus\//i;
 const requiredModelSlots = [
   ['orchestrator', 'openai/gpt-5.5', 'CEREBRO_MODEL_ORCHESTRATOR'],
-  ['conductor', 'openai/gpt-5.5', 'CEREBRO_MODEL_CONDUCTOR'],
+  ['auditor', 'openai/gpt-5.5', 'CEREBRO_MODEL_AUDITOR'],
   ['planner', 'openai/gpt-5.5', 'CEREBRO_MODEL_PLANNER'],
   ['design', 'openai/gpt-5.5', 'CEREBRO_MODEL_DESIGN'],
   ['analyst', 'openai/gpt-5.4', 'CEREBRO_MODEL_ANALYST'],
@@ -295,7 +295,7 @@ function verifyInstalledRuntime(projectDir: string) {
   }
 
   const identity = readFileSync(path.join(projectDir, '.cerebro/cerebro-identity.md'), 'utf8');
-  for (const toolName of ['cerebro_agent_task', 'cerebro_collect_result', 'cerebro_dispatch_agent']) {
+  for (const toolName of ['cerebro_agent_task', 'cerebro_collect_result', 'cerebro_dispatch_agent', 'cerebro_execute_workflow']) {
     if (!identity.includes(toolName)) fail(`Cerebro identity missing tool ${toolName}`);
   }
 
