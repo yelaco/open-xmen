@@ -247,6 +247,19 @@ function verifyFreshInstall(tarballPath: string) {
       if (agentNames.length !== 13) throw new Error(\`Expected 13 agents, got \${agentNames.length}\`);
       if (!config.agent?.cerebro) throw new Error('Missing cerebro agent registration');
       if ('default_agent' in config) throw new Error('Plugin config hook should not force default_agent');
+      const output = {
+        parts: [{
+          id: 'prt_smoke',
+          sessionID: 'ses_smoke',
+          messageID: 'msg_smoke',
+          type: 'text',
+          text: 'Plan this work: smoke',
+        }],
+      };
+      await hooks['command.execute.before']?.({ command: 'cerebro-plan', sessionID: 'ses_smoke', arguments: 'smoke' }, output);
+      if (output.parts.length !== 1) throw new Error('Command hook should not inject extra parts with plugin-owned IDs');
+      if (output.parts[0].id !== 'prt_smoke') throw new Error('Command hook should preserve OpenCode-generated part IDs');
+      if (!output.parts[0].text.includes('Cerebro OpenCode runtime is active.')) throw new Error('Command hook did not prepend Cerebro runtime prelude');
     `], { cwd: packageDir });
 
     console.log('Running installed doctor for runtime-files install...');

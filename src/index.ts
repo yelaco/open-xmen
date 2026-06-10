@@ -1,6 +1,6 @@
 import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
-import type { Part, Permission } from "@opencode-ai/sdk";
+import type { Permission } from "@opencode-ai/sdk";
 import { appendFile, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -424,18 +424,13 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
     async "command.execute.before"(input, output) {
       const command = input.command.startsWith("/") ? input.command : `/${input.command}`;
       if (!COMMANDS.has(command)) return;
-      output.parts.unshift({
-        id: `cerebro-command-${input.sessionID}`,
-        sessionID: input.sessionID,
-        messageID: `cerebro-command-${input.command}`,
-        type: "text",
-        text: [
-          "Cerebro OpenCode runtime is active.",
-          "Before acting, use the Cerebro coordination tools for run state, mailbox, checkpoints, pending-todo checks, and model-slot lookup.",
-          "Runtime root: `.cerebro/`. Preserve command names and role names.",
-        ].join("\n"),
-        synthetic: true,
-      } satisfies Part);
+      const prelude = [
+        "Cerebro OpenCode runtime is active.",
+        "Before acting, use the Cerebro coordination tools for run state, mailbox, checkpoints, pending-todo checks, and model-slot lookup.",
+        "Runtime root: `.cerebro/`. Preserve command names and role names.",
+      ].join("\n");
+      const firstText = output.parts.find((part) => part.type === "text");
+      if (firstText && "text" in firstText) firstText.text = `${prelude}\n\n${firstText.text}`;
     },
 
     async "tool.execute.before"(input, output) {
