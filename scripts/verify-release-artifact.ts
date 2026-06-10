@@ -13,7 +13,6 @@ const expectedPackagePluginEntry = packageName;
 const requiredPackagedFiles = [
   'package.json',
   'README.md',
-  'AGENTS.md',
   'dist/index.js',
   'dist/index.d.ts',
   'dist/cli.js',
@@ -26,7 +25,7 @@ const requiredPackagedFiles = [
   'dist/runtime/definitions.d.ts',
 ];
 
-const allowedTopLevelFiles = new Set(['package.json', 'README.md', 'AGENTS.md']);
+const allowedTopLevelFiles = new Set(['package.json', 'README.md']);
 const forbiddenPackagedPathPattern = /(^|\/)\.env(\.|$|\/)|secret|credential|token|private[-_]?key|node_modules|__pycache__|\.pyc$|\.opencode\/|\.cerebro\/|\.claude\/|\.omx\/|\.sisyphus\//i;
 const requiredModelSlots = [
   ['orchestrator', 'openai/gpt-5.5', 'CEREBRO_MODEL_ORCHESTRATOR'],
