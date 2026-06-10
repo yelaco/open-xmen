@@ -5,7 +5,7 @@
  *   - src/assets/cerebro/  — Cerebro runtime content (.cerebro/ files); real files, real extensions
  *   - src/agents/          — OpenCode agent markdown (via factories)
  *   - src/commands/        — OpenCode command markdown (via definitions)
- *   - AGENTS.md            — Repository-level operating instructions
+ *   - src/assets/AGENTS.md — Repository-level operating instructions
  *
  * Run with: bun scripts/generate-assets.ts
  */
@@ -111,7 +111,7 @@ function main() {
     ...buildCommandAssets(),
 
     // Repository-level instructions
-    { path: "AGENTS.md", content: readFileSync(path.join(repoRoot, "AGENTS.md"), "utf8") },
+    { path: "AGENTS.md", content: readFileSync(path.join(repoRoot, "src/assets/AGENTS.md"), "utf8") },
   ];
 
   // Stable sort by path

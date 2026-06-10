@@ -19,14 +19,12 @@ The old Claude workflow used `.claude/agents`, `.claude/commands`, hooks, and na
 
 The OpenCode port uses:
 
-- `open-xmen` package plugin entry — installed by `open-xmen install`
-- `.opencode/agents/*.md` and `.opencode/commands/*.md` — optional legacy managed files for repo-local installs
-- `.opencode/plugins/open-xmen.ts` — local development bridge in this repository only; installed projects use the package plugin entry
-- `src/index.ts` — reusable plugin implementation
+- `.opencode/agents/*.md` — OpenCode-native Cerebro role agents (installed into target projects)
+- `.opencode/commands/*.md` — preserved Cerebro slash commands (installed into target projects)
+- `open-xmen` package plugin entry — wired into `opencode.jsonc` by `open-xmen install`
+- `src/index.ts` — reusable plugin implementation (hooks, tools, model-slot injection)
 - Cerebro custom tools for run state, tasks, mailbox, checkpoints, model slots, and pending-todo checks
 - `AGENTS.md` and `.cerebro/cerebro-identity.md` — OpenCode instruction surface when runtime files are installed
-
-The legacy `.claude/` files are still present as migration source/compatibility material, but the active OpenCode runtime is `.opencode/` + `.cerebro/`.
 
 ---
 
@@ -125,24 +123,18 @@ For autonomous best-effort mode:
 ## CLI
 
 ```bash
-open-xmen [install] [--dir <path>] [--global] [--with-runtime-files] [--dry-run] [--reset] [--force] [--no-deps]
+open-xmen [install] [--dir <path>] [--dry-run] [--reset] [--force] [--no-deps]
+open-xmen update [--dir <path>] [--dry-run]
 open-xmen doctor [--dir <path>] [--json]
 open-xmen models
 ```
 
-| Command | Purpose |
-|---|---|
-| `open-xmen install` | Install or refresh the plugin entry and OpenCode package cache. This is also the manual upgrade path. |
-| `open-xmen doctor` | Validate the resolved OpenCode plugin install. Use `--json` for script-friendly diagnostics. |
-| `open-xmen models` | Print the current Cerebro model-slot mapping. |
-
-Install behavior:
-
-- Omitting the subcommand defaults to `install`.
-- Default/global install honors `OPENCODE_CONFIG_DIR`, then `XDG_CONFIG_HOME`, then `~/.config/opencode`.
-- Config writes are atomic via `opencode.jsonc.tmp`; an `opencode.jsonc.bak` backup is created before replacing an existing config.
-- There is no separate manual refresh command. Re-run `bunx open-xmen@latest install` to refresh the config entry and cached package.
-- Project runtime files are never written unless `--with-runtime-files` is explicitly passed.
+- No subcommand defaults to `install`, matching `bunx open-xmen@latest install` behavior.
+- `update` refreshes all managed runtime and template files to the current package version. Recommended after `bunx open-xmen@latest` fetches a new version.
+- `--dry-run` prints planned writes and does not mutate the target project.
+- `--reset` / `--force` refresh existing managed files; without them, existing files are skipped.
+- `opencode.jsonc` writes are atomic via `opencode.jsonc.tmp` and create `opencode.jsonc.bak` before replacing an existing config.
+- `doctor --json` returns script-friendly diagnostics.
 
 ## Commands
 
@@ -163,9 +155,10 @@ Install behavior:
 | Legion | Customer / product-owner proxy | `openai/gpt-5.4` |
 | Cypher | Requirements analyst | `openai/gpt-5.4` |
 | Professor X | Strategic planner | `openai/gpt-5.5` |
-| Cyclops | Execution sequencer and verifier | `openai/gpt-5.5` |
-| Wolverine | Code/test implementation | `openai/gpt-5.5` |
-| Storm | UI/visual implementation | `openai/gpt-5.5` |
+| Cyclops | Execution layer conductor | `openai/gpt-5.5` |
+| Wolverine | Implementation worker (code, tests, scripts) | `openai/gpt-5.5` |
+| Jean Grey | Design strategist (component specs, UX flows) | `openai/gpt-5.5` |
+| Storm | Visual engineering (CSS, styling, accessibility) | `openai/gpt-5.5` |
 | Forge | Architecture consultant | `openai/gpt-5.5` |
 | Nightcrawler | Read-only codebase search | `openai/gpt-5.4-mini-fast` |
 | Sage | Docs/API research | `openai/gpt-5.4-mini-fast` |
@@ -193,9 +186,15 @@ bunx open-xmen@latest install --dir /path/to/project --with-runtime-files --rese
 ├── team-runs/                   # manifests, task state, mailbox logs, checkpoints, events
 ├── pending-todos/               # worker task todos
 ├── boulder.json                 # execution checkpoint
-├── schemas/                     # state schemas
+├── docs/                        # workflow, orchestration, and agent guides
+├── integrations/                # optional integration configs (e.g. semble)
+├── schemas/                     # state schemas (boulder, team-run)
 ├── templates/                   # plan/context/run templates
 └── scripts/                     # validators and maintenance helpers
+
+.opencode/
+├── agents/*.md                  # role agent definitions (cerebro, cyclops, wolverine, …)
+└── commands/*.md                # slash command definitions
 ```
 
 ---
@@ -215,8 +214,3 @@ npm run verify:release
 
 Use `bunx open-xmen@latest install` for safe package/config refreshes outside OpenCode, and `bunx open-xmen@latest doctor [--dir <path>]` for diagnostics.
 
-## Auto-Upgrades
-
-When the `open-xmen` plugin sees the first top-level OpenCode session, it checks the npm registry for the latest package version. If a newer package is available and the plugin is running from a package-managed `node_modules/open-xmen` install, it best-effort refreshes that OpenCode package workspace (`bun.lock` and stale `node_modules/open-xmen` included) and shows a toast. Restart OpenCode to load the updated plugin code. This does not write `.opencode/` or `.cerebro/` files into your project.
-
-Set `OPEN_XMEN_SKIP_AUTO_UPGRADE=1` or `OPEN_XMEN_AUTO_UPGRADE=0` to disable this behavior.
