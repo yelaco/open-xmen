@@ -44,9 +44,10 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
-function run(command: string, args: string[], options: { cwd?: string } = {}) {
+function run(command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd ?? repoRoot,
+    env: options.env,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -125,31 +126,85 @@ function verifyFreshInstall(tarballPath: string) {
     const cliPath = path.join(packageDir, 'node_modules', packageName, 'dist', 'cli.js');
     if (!existsSync(cliPath)) fail(`Installed CLI is missing: ${cliPath}`);
 
-    console.log('Running installed CLI smoke install...');
+    console.log('Running installed CLI plugin-only smoke install...');
     run('node', [cliPath, 'install', '--dir', projectDir, '--no-deps'], { cwd: packageDir });
 
     const opencodeConfig = readJsonc(path.join(projectDir, 'opencode.jsonc'));
     if (!isRecord(opencodeConfig) || !Array.isArray(opencodeConfig.plugin) || !opencodeConfig.plugin.includes(packageName)) {
       fail(`Installed opencode.jsonc does not include bare plugin entry ${packageName}`);
     }
+    if (existsSync(path.join(projectDir, '.opencode'))) fail('Plugin-only install unexpectedly wrote .opencode/');
+    if (existsSync(path.join(projectDir, '.cerebro'))) fail('Plugin-only install unexpectedly wrote .cerebro/');
+    if (existsSync(path.join(projectDir, 'AGENTS.md'))) fail('Plugin-only install unexpectedly wrote AGENTS.md');
+
+    console.log('Running installed doctor for plugin-only install...');
+    run('node', [cliPath, 'doctor', '--dir', projectDir], { cwd: packageDir });
+
+    console.log('Running installed CLI runtime-files smoke install...');
+    const runtimeProjectDir = path.join(tempRoot, 'project-runtime');
+    mkdirSync(runtimeProjectDir, { recursive: true });
+    run('node', [cliPath, 'install', '--dir', runtimeProjectDir, '--with-runtime-files', '--no-deps'], { cwd: packageDir });
+
+    const runtimeOpencodeConfig = readJsonc(path.join(runtimeProjectDir, 'opencode.jsonc'));
+    if (!isRecord(runtimeOpencodeConfig) || !Array.isArray(runtimeOpencodeConfig.plugin) || !runtimeOpencodeConfig.plugin.includes(packageName)) {
+      fail(`Runtime-files opencode.jsonc does not include bare plugin entry ${packageName}`);
+    }
 
     for (const installedFile of runtimeAssetPaths()) {
-      if (!existsSync(path.join(projectDir, installedFile))) {
+      if (!existsSync(path.join(runtimeProjectDir, installedFile))) {
         fail(`Smoke install missing ${installedFile}`);
       }
     }
     for (const runtimeDir of ['.cerebro/plans', '.cerebro/notepads', '.cerebro/team-runs', '.cerebro/pending-todos']) {
-      if (!existsSync(path.join(projectDir, runtimeDir))) {
+      if (!existsSync(path.join(runtimeProjectDir, runtimeDir))) {
         fail(`Smoke install missing runtime directory ${runtimeDir}`);
       }
     }
-    if (existsSync(path.join(projectDir, '.opencode/plugins/open-xmen.ts'))) {
+    if (existsSync(path.join(runtimeProjectDir, '.opencode/plugins/open-xmen.ts'))) {
       fail('Smoke install copied repo-local plugin bridge into installed project');
     }
-    verifyInstalledRuntime(projectDir);
+    verifyInstalledRuntime(runtimeProjectDir);
 
-    console.log('Running installed doctor...');
-    run('node', [cliPath, 'doctor', '--dir', projectDir], { cwd: packageDir });
+    console.log('Running installed plugin config smoke test...');
+    run('node', ['--input-type=module', '-e', `
+      import plugin from './node_modules/${packageName}/dist/index.js';
+      const hooks = await plugin({
+        worktree: process.cwd(),
+        directory: process.cwd(),
+        client: {},
+        project: {},
+        experimental_workspace: { register() {} },
+        serverUrl: new URL('http://127.0.0.1'),
+        $: undefined,
+      });
+      const config = { plugin: ['${packageName}'] };
+      await hooks.config?.(config);
+      const commandNames = Object.keys(config.command ?? {}).sort();
+      const agentNames = Object.keys(config.agent ?? {}).sort();
+      if (commandNames.length !== 5) throw new Error(\`Expected 5 commands, got \${commandNames.length}\`);
+      if (!commandNames.includes('cerebro-plan') || !commandNames.includes('to-me-my-x-men')) throw new Error('Missing preserved command registrations');
+      if (agentNames.length !== 13) throw new Error(\`Expected 13 agents, got \${agentNames.length}\`);
+      if (!config.agent?.cerebro) throw new Error('Missing cerebro agent registration');
+      if ('default_agent' in config) throw new Error('Plugin config hook should not force default_agent');
+    `], { cwd: packageDir });
+
+    console.log('Running installed doctor for runtime-files install...');
+    run('node', [cliPath, 'doctor', '--dir', runtimeProjectDir], { cwd: packageDir });
+
+    console.log('Running installed global install smoke test...');
+    const globalConfigRoot = path.join(tempRoot, 'global-config');
+    mkdirSync(globalConfigRoot, { recursive: true });
+    run('node', [cliPath, 'install', '--global', '--no-deps'], {
+      cwd: packageDir,
+      env: {
+        ...process.env,
+        XDG_CONFIG_HOME: globalConfigRoot,
+      },
+    });
+    const globalConfig = readJsonc(path.join(globalConfigRoot, 'opencode', 'opencode.jsonc'));
+    if (!isRecord(globalConfig) || !Array.isArray(globalConfig.plugin) || !globalConfig.plugin.includes(packageName)) {
+      fail(`Global opencode.jsonc does not include bare plugin entry ${packageName}`);
+    }
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

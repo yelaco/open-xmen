@@ -3,14 +3,16 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { modelSlots } from "./config/models.js";
 import { installManagedAgentInstructions, installManagedRuntime } from "./cli/runtime.js";
-import { updateOpencodeConfig, warmOpenCodePluginCache } from "./cli/config.js";
+import { globalOpenCodeConfigDir, updateOpencodeConfig, warmOpenCodePluginCache } from "./cli/config.js";
 import { runOpenCodeDoctor } from "./cli/doctor.js";
 import { fileURLToPath } from "node:url";
 
 type InstallOptions = {
   dryRun: boolean;
   force: boolean;
+  global: boolean;
   reset: boolean;
+  runtimeFiles: boolean;
   skipDeps: boolean;
   target: string;
 };
@@ -47,12 +49,14 @@ Usage:
   open-xmen models
 
 Install options:
-  --dir <path>    Project directory to install into (default: current directory)
-  --dry-run       Print planned writes without changing files
-  --reset         Refresh managed runtime/template files and replace existing Open X-Men blocks
-  --force         Alias for overwrite behavior used by --reset
-  --no-deps       Skip OpenCode plugin cache warm-up
-  -h, --help      Show this help message
+  --dir <path>           Project directory to install into (default: current directory)
+  -g, --global           Install into OpenCode global config instead of a project
+  --with-runtime-files   Also write managed .opencode/, .cerebro/, and AGENTS.md files
+  --dry-run              Print planned writes without changing files
+  --reset                Refresh managed runtime/template files when used with --with-runtime-files
+  --force                Alias for overwrite behavior used by --reset
+  --no-deps              Skip OpenCode plugin cache warm-up
+  -h, --help             Show this help message
 
 Update options:
   --dir <path>    Project directory to update (default: current directory)
@@ -65,6 +69,8 @@ Doctor options:
 
 Examples:
   bunx open-xmen@latest install
+  bunx open-xmen@latest install --global
+  bunx open-xmen@latest install --with-runtime-files
   bunx open-xmen@latest install --dir /path/to/project --dry-run
   bunx open-xmen@latest update
   open-xmen doctor --json
@@ -72,9 +78,11 @@ Examples:
 }
 
 function printInstallHelp() {
-  console.log(`Usage: open-xmen install [--dir <path>] [--dry-run] [--reset] [--force] [--no-deps]
+  console.log(`Usage: open-xmen install [--dir <path>] [--global] [--with-runtime-files] [--dry-run] [--reset] [--force] [--no-deps]
 
-By default, existing runtime/template files are skipped. Use --reset or --force to refresh them.
+By default, install only adds the Open X-Men plugin entry to opencode.jsonc; the plugin registers commands and agents at load time.
+Use --with-runtime-files to also write managed .opencode/, .cerebro/, and AGENTS.md files. Use --reset or --force with --with-runtime-files to refresh them.
+Use --global to add the plugin entry to the OpenCode global config instead of a project config.
 opencode.jsonc is updated atomically and an opencode.jsonc.bak backup is created when replacing an existing config.`);
 }
 
@@ -97,7 +105,7 @@ function install(args: string[]) {
 
   const unknown = args.find((arg) => {
     if (!arg.startsWith("-")) return false;
-    return !["--dir", "--dry-run", "--force", "--reset", "--no-deps"].includes(arg);
+    return !["--dir", "--dry-run", "--force", "--global", "-g", "--reset", "--with-runtime-files", "--no-deps"].includes(arg);
   });
   if (unknown) {
     console.error(`Unknown install option: ${unknown}`);
@@ -109,28 +117,49 @@ function install(args: string[]) {
     console.error("Missing value for --dir");
     return 1;
   }
+  const global = args.includes("--global") || args.includes("-g");
+  const runtimeFiles = args.includes("--with-runtime-files");
+  if (global && args.includes("--dir")) {
+    console.error("Use either --global or --dir, not both");
+    return 1;
+  }
+  if (global && runtimeFiles) {
+    console.error("--with-runtime-files is project-local and cannot be combined with --global");
+    return 1;
+  }
 
   const options: InstallOptions = {
     dryRun: args.includes("--dry-run"),
     force: args.includes("--force"),
+    global,
     reset: args.includes("--reset"),
+    runtimeFiles,
     skipDeps: args.includes("--no-deps"),
-    target: path.resolve(targetArg || process.cwd()),
+    target: global ? globalOpenCodeConfigDir() : path.resolve(targetArg || process.cwd()),
   };
   const overwrite = options.force || options.reset;
   const planned: string[] = [];
 
   console.log(`Open X-Men ${options.dryRun ? "dry run" : "install"}`);
-  console.log(`Target: ${options.target}`);
-  if (overwrite) console.log("Mode: refresh existing managed files (--reset/--force)");
-  else console.log("Mode: safe install (existing files are skipped)");
+  console.log(`${options.global ? "Global config" : "Target"}: ${options.target}`);
+  if (options.global) console.log("Mode: global plugin entry only");
+  else if (options.runtimeFiles && overwrite) console.log("Mode: plugin entry + refresh managed runtime files (--reset/--force)");
+  else if (options.runtimeFiles) console.log("Mode: plugin entry + managed runtime files (existing files are skipped)");
+  else console.log("Mode: plugin entry only (no .opencode/ or .cerebro/ files)");
 
   if (!options.dryRun) mkdirSync(options.target, { recursive: true });
   else planned.push(`ensure directory ${options.target}`);
 
-  installManagedRuntime(options.target, { dryRun: options.dryRun, overwrite, planned });
-  installManagedAgentInstructions(options.target, { dryRun: options.dryRun, overwrite, planned });
-  updateOpencodeConfig(options.target, { dryRun: options.dryRun, planned });
+  if (options.runtimeFiles) {
+    installManagedRuntime(options.target, { dryRun: options.dryRun, overwrite, planned });
+    installManagedAgentInstructions(options.target, { dryRun: options.dryRun, overwrite, planned });
+  }
+  updateOpencodeConfig(options.target, {
+    dryRun: options.dryRun,
+    planned,
+    includeRuntimeInstructions: options.runtimeFiles,
+    setCerebroDefaults: options.runtimeFiles,
+  });
   if (!options.dryRun && !options.skipDeps) warmOpenCodePluginCache(packageRoot());
 
   if (options.dryRun) {
@@ -143,8 +172,9 @@ function install(args: string[]) {
   if (options.skipDeps) console.log("Skipped OpenCode plugin cache warm-up (--no-deps)");
 
   console.log("open-xmen install: PASS");
-  console.log(`Installed into ${options.target}`);
-  console.log("Next: run `opencode .`, then use `/cerebro-index`, `/cerebro-plan`, or `/to-me-my-x-men`.");
+  console.log(`${options.global ? "Installed globally in" : "Installed into"} ${options.target}`);
+  if (!options.runtimeFiles) console.log("No .opencode/ or .cerebro/ files were written; commands and agents are provided by the plugin.");
+  console.log("Next: restart OpenCode, then use `/cerebro-index`, `/cerebro-plan`, or `/to-me-my-x-men`.");
   return 0;
 }
 
@@ -178,7 +208,7 @@ function update(args: string[]) {
 
   installManagedRuntime(target, { dryRun, overwrite: true, planned });
   installManagedAgentInstructions(target, { dryRun, overwrite: true, planned });
-  updateOpencodeConfig(target, { dryRun, planned });
+  updateOpencodeConfig(target, { dryRun, planned, includeRuntimeInstructions: true, setCerebroDefaults: true });
 
   if (dryRun) {
     console.log("\nPlanned actions:");
@@ -229,6 +259,7 @@ function doctor(args: string[] = []) {
   }
 
   console.log("Cerebro OpenCode doctor: PASS");
+  console.log(`Mode: ${result.mode}`);
   console.log(`Agents: ${result.agents}`);
   console.log(`Commands: ${result.commands}`);
   return 0;

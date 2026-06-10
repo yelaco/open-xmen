@@ -8,7 +8,20 @@ const OPENCODE_INSTRUCTIONS = ["AGENTS.md", ".cerebro/cerebro-identity.md", ".ce
 type JsonObject = { [key: string]: JsonValue };
 type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 
-export function updateOpencodeConfig(target: string, opts: { dryRun: boolean; planned: string[] }) {
+export type UpdateOpenCodeConfigOptions = {
+  dryRun: boolean;
+  planned: string[];
+  includeRuntimeInstructions?: boolean;
+  setCerebroDefaults?: boolean;
+};
+
+export function globalOpenCodeConfigDir() {
+  const configHome = process.env.XDG_CONFIG_HOME || (process.env.HOME ? path.join(process.env.HOME, ".config") : undefined);
+  if (!configHome) throw new Error("Cannot resolve OpenCode global config directory: HOME is not set");
+  return path.join(configHome, "opencode");
+}
+
+export function updateOpencodeConfig(target: string, opts: UpdateOpenCodeConfigOptions) {
   const destination = path.join(target, "opencode.jsonc");
   let parsed: JsonValue = {};
   if (existsSync(destination)) {
@@ -21,10 +34,14 @@ export function updateOpencodeConfig(target: string, opts: { dryRun: boolean; pl
   const config: JsonObject = isRecord(parsed) ? parsed : {};
   config.$schema ||= "https://opencode.ai/config.json";
   config.plugin = replaceOpenXmenPluginEntries(asArray(config.plugin), getPluginEntry());
-  config.instructions = appendUnique(asArray(config.instructions), ...OPENCODE_INSTRUCTIONS);
-  config.default_agent ??= "cerebro";
-  config.share ??= "disabled";
-  config.permission ??= { edit: "ask", bash: "ask", webfetch: "ask", task: "ask", question: "allow" };
+  if (opts.includeRuntimeInstructions) {
+    config.instructions = appendUnique(asArray(config.instructions), ...OPENCODE_INSTRUCTIONS);
+  }
+  if (opts.setCerebroDefaults) {
+    config.default_agent ??= "cerebro";
+    config.share ??= "disabled";
+    config.permission ??= { edit: "ask", bash: "ask", webfetch: "ask", task: "ask", question: "allow" };
+  }
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
   if (opts.dryRun) {

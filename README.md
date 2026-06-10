@@ -19,13 +19,12 @@ The old Claude workflow used `.claude/agents`, `.claude/commands`, hooks, and na
 
 The OpenCode port uses:
 
-- `.opencode/agents/*.md` — OpenCode-native Cerebro role agents
-- `.opencode/commands/*.md` — preserved Cerebro slash commands
 - `open-xmen` package plugin entry — installed by `open-xmen install`
+- `.opencode/agents/*.md` and `.opencode/commands/*.md` — optional legacy managed files for repo-local installs
 - `.opencode/plugins/open-xmen.ts` — local development bridge in this repository only; installed projects use the package plugin entry
 - `src/index.ts` — reusable plugin implementation
 - Cerebro custom tools for run state, tasks, mailbox, checkpoints, model slots, and pending-todo checks
-- `AGENTS.md` and `.cerebro/cerebro-identity.md` — OpenCode instruction surface
+- `AGENTS.md` and `.cerebro/cerebro-identity.md` — OpenCode instruction surface when runtime files are installed
 
 The legacy `.claude/` files are still present as migration source/compatibility material, but the active OpenCode runtime is `.opencode/` + `.cerebro/`.
 
@@ -65,7 +64,7 @@ Legacy `CEREBRO_MODEL_FRONTIER`, `CEREBRO_MODEL_STRONG`, and `CEREBRO_MODEL_CODI
 
 ## Quick Start
 
-Install Open X-Men into any OpenCode project with bunx. The installer adds the published `open-xmen` package as an OpenCode plugin entry and installs the repo-local Cerebro runtime files:
+Install Open X-Men into any OpenCode project with bunx. By default, the installer only adds the published `open-xmen` package as an OpenCode plugin entry; the plugin registers commands and agents at load time:
 
 ```bash
 cd /path/to/your/project
@@ -73,17 +72,21 @@ bunx open-xmen@latest install
 opencode .
 ```
 
-No setup slash command is required. Re-running the installer is safe: existing runtime/template files are skipped by default, while `opencode.jsonc` is updated atomically with an `opencode.jsonc.bak` backup when it changes. Use `--reset` or `--force` only when you want to refresh managed Open X-Men files.
+No setup slash command is required. Re-running the installer is safe: `opencode.jsonc` is updated atomically with an `opencode.jsonc.bak` backup when it changes.
 
 Useful installer flags:
 
 ```bash
+bunx open-xmen@latest install --global
+bunx open-xmen@latest install --with-runtime-files
 bunx open-xmen@latest install --dir /path/to/project
 bunx open-xmen@latest install --dry-run
 bunx open-xmen@latest install --reset
 bunx open-xmen@latest install --force
 bunx open-xmen@latest install --no-deps
 ```
+
+Use `--with-runtime-files` only if you want the old managed `.opencode/` + `.cerebro/` files written into a project.
 
 For local development of this package:
 
@@ -112,14 +115,16 @@ For autonomous best-effort mode:
 ## CLI
 
 ```bash
-open-xmen [install] [--dir <path>] [--dry-run] [--reset] [--force] [--no-deps]
+open-xmen [install] [--dir <path>] [--global] [--with-runtime-files] [--dry-run] [--reset] [--force] [--no-deps]
 open-xmen doctor [--dir <path>] [--json]
 open-xmen models
 ```
 
 - No subcommand defaults to `install`, matching `bunx open-xmen@latest install` behavior.
-- `--dry-run` prints planned writes and does not mutate the target project.
-- `--reset` / `--force` refresh existing managed files; without them, existing files are skipped.
+- `--dry-run` prints planned writes and does not mutate the target config or project.
+- `--global` installs the plugin entry into the OpenCode global config instead of a project config.
+- `--with-runtime-files` writes the legacy managed runtime files; without it, no `.opencode/` or `.cerebro/` files are created.
+- `--reset` / `--force` refresh existing managed files when `--with-runtime-files` is used.
 - `opencode.jsonc` writes are atomic via `opencode.jsonc.tmp` and create `opencode.jsonc.bak` before replacing an existing config.
 - `doctor --json` returns script-friendly diagnostics.
 
@@ -184,7 +189,7 @@ python3 .cerebro/scripts/validate-team-runs.py
 npm run verify:release
 ```
 
-`npm run verify:release` builds the package, packs it with `npm pack --json --ignore-scripts`, checks the packaged runtime file set exactly, rejects forbidden paths such as dev-only plugin bridges or secret-like files, installs the tarball into a clean temp package, runs `open-xmen install --no-deps`, verifies `plugin: ["open-xmen"]`, and runs `open-xmen doctor`.
+`npm run verify:release` builds the package, packs it with `npm pack --json --ignore-scripts`, checks the packaged runtime file set exactly, rejects forbidden paths such as dev-only plugin bridges or secret-like files, installs the tarball into a clean temp package, smoke-tests plugin-only install, runtime-file install, global install, plugin command/agent registration, and `open-xmen doctor`.
 
 `/cerebro-doctor` runs the same class of checks from inside OpenCode, including model-slot consistency and runtime drift.
 

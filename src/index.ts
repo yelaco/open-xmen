@@ -5,6 +5,23 @@ import { appendFile, lstat, mkdir, readFile, readdir, rm, writeFile } from "node
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import type { AgentDefinition } from "./agents/index.js";
+import {
+  createBeastAgent,
+  createCerebroAgent,
+  createCyclopsAgent,
+  createCypherAgent,
+  createEmmaFrostAgent,
+  createForgeAgent,
+  createJeanGreyAgent,
+  createLegionAgent,
+  createNightcrawlerAgent,
+  createProfessorXAgent,
+  createSageAgent,
+  createStormAgent,
+  createWolverineAgent,
+} from "./agents/index.js";
+import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
 import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, modelSlots } from "./config/models.js";
 
@@ -17,6 +34,18 @@ const MAX_PENDING_FILES = 500;
 const MAX_PENDING_FILE_BYTES = 64 * 1024;
 type Risk = (typeof RISKS)[number];
 type TaskStatus = (typeof TASK_STATUSES)[number];
+
+type OpenCodeConfig = Record<string, unknown> & {
+  command?: Record<string, {
+    template: string;
+    description?: string;
+    agent?: string;
+    model?: string;
+    variant?: string;
+    subtask?: boolean;
+  }>;
+  agent?: Record<string, Record<string, unknown> | undefined>;
+};
 
 type RuntimeContext = {
   worktree: string;
@@ -123,6 +152,57 @@ function parseModelID(model: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function defaultAgentDefinitions() {
+  return [
+    createCerebroAgent(),
+    createLegionAgent(),
+    createCypherAgent(),
+    createProfessorXAgent(),
+    createWolverineAgent(),
+    createJeanGreyAgent(),
+    createStormAgent(),
+    createCyclopsAgent(),
+    createForgeAgent(),
+    createNightcrawlerAgent(),
+    createSageAgent(),
+    createBeastAgent(),
+    createEmmaFrostAgent(),
+  ];
+}
+
+function toConfigAgent(definition: AgentDefinition): Record<string, unknown> {
+  const { config, description, opencode } = definition;
+  const meta = opencode ?? {};
+  return {
+    ...config,
+    ...(description ? { description } : {}),
+    ...(meta.mode ? { mode: meta.mode } : {}),
+    ...(meta.variant ? { variant: meta.variant } : {}),
+    ...(meta.steps !== undefined ? { steps: meta.steps } : {}),
+    ...(meta.permission ? { permission: meta.permission } : {}),
+    ...(definition._modelArray && definition._modelArray.length > 1
+      ? { options: { ...(isRecord(config.options) ? config.options : {}), model_fallbacks: definition._modelArray.slice(1).map(({ id }) => id) } }
+      : {}),
+  };
+}
+
+function registerCerebroConfig(input: OpenCodeConfig) {
+  input.command ??= {};
+  for (const command of CEREBRO_COMMAND_DEFINITIONS) {
+    input.command[command.name] ??= {
+      template: command.content,
+      description: command.description,
+      agent: "cerebro",
+      model: command.model,
+    };
+  }
+
+  input.agent ??= {};
+  for (const agent of defaultAgentDefinitions()) {
+    input.agent[agent.name] ??= toConfigAgent(agent);
+  }
 }
 
 function assertSafeName(value: string, label: string) {
@@ -286,6 +366,10 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
   }
 
   return {
+    async config(input) {
+      registerCerebroConfig(input as OpenCodeConfig);
+    },
+
     async "permission.ask"(input: Permission, output) {
       const pattern = Array.isArray(input.pattern) ? input.pattern[0] : (input.pattern ?? "");
       if (pattern && isSecretPath(pattern)) {
