@@ -8,6 +8,8 @@ import { runtimeAssetPaths } from '../src/runtime/index.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const packageName = 'open-xmen';
+const packageVersion = (JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as { version: string }).version;
+const expectedPackagePluginEntry = `${packageName}@${packageVersion}`;
 
 const requiredPackagedFiles = [
   'package.json',
@@ -115,10 +117,13 @@ function verifyFreshInstall(tarballPath: string) {
     console.log('Installing packed artifact into clean temp package...');
     const packageDir = path.join(tempRoot, 'package');
     const projectDir = path.join(tempRoot, 'project');
+    const defaultProjectDir = path.join(tempRoot, 'project-default');
+    const opencodeCacheRoot = path.join(tempRoot, 'opencode-cache');
     const tarballTarget = path.join(tempRoot, path.basename(tarballPath));
     copyFileSync(tarballPath, tarballTarget);
     mkdirSync(packageDir, { recursive: true });
     mkdirSync(projectDir, { recursive: true });
+    mkdirSync(defaultProjectDir, { recursive: true });
 
     run('npm', ['init', '-y'], { cwd: packageDir });
     run('npm', ['install', '--ignore-scripts', tarballTarget], { cwd: packageDir });
@@ -126,12 +131,23 @@ function verifyFreshInstall(tarballPath: string) {
     const cliPath = path.join(packageDir, 'node_modules', packageName, 'dist', 'cli.js');
     if (!existsSync(cliPath)) fail(`Installed CLI is missing: ${cliPath}`);
 
+    console.log('Running installed CLI default smoke install with cache warm-up...');
+    const isolatedCacheEnv = { ...process.env, XDG_CACHE_HOME: opencodeCacheRoot, OPEN_XMEN_SEED_OPENCODE_CACHE: '1' };
+    run('node', [cliPath, 'install', '--dir', defaultProjectDir], { cwd: packageDir, env: isolatedCacheEnv });
+    const defaultOpencodeConfig = readJsonc(path.join(defaultProjectDir, 'opencode.jsonc'));
+    if (!isRecord(defaultOpencodeConfig) || !Array.isArray(defaultOpencodeConfig.plugin) || !defaultOpencodeConfig.plugin.includes(expectedPackagePluginEntry)) {
+      fail(`Default opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
+    }
+    if (existsSync(path.join(defaultProjectDir, '.opencode'))) fail('Default install unexpectedly wrote .opencode/');
+    if (existsSync(path.join(defaultProjectDir, '.cerebro'))) fail('Default install unexpectedly wrote .cerebro/');
+    run('node', [cliPath, 'doctor', '--dir', defaultProjectDir], { cwd: packageDir, env: isolatedCacheEnv });
+
     console.log('Running installed CLI plugin-only smoke install...');
     run('node', [cliPath, 'install', '--dir', projectDir, '--no-deps'], { cwd: packageDir });
 
     const opencodeConfig = readJsonc(path.join(projectDir, 'opencode.jsonc'));
-    if (!isRecord(opencodeConfig) || !Array.isArray(opencodeConfig.plugin) || !opencodeConfig.plugin.includes(packageName)) {
-      fail(`Installed opencode.jsonc does not include bare plugin entry ${packageName}`);
+    if (!isRecord(opencodeConfig) || !Array.isArray(opencodeConfig.plugin) || !opencodeConfig.plugin.includes(expectedPackagePluginEntry)) {
+      fail(`Installed opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
     }
     if (existsSync(path.join(projectDir, '.opencode'))) fail('Plugin-only install unexpectedly wrote .opencode/');
     if (existsSync(path.join(projectDir, '.cerebro'))) fail('Plugin-only install unexpectedly wrote .cerebro/');
@@ -139,18 +155,19 @@ function verifyFreshInstall(tarballPath: string) {
 
     // Do not run `doctor` for this plugin-only + --no-deps smoke. The temp project
     // intentionally has no node_modules/open-xmen and no warmed OpenCode package
-    // cache, so `opencode debug config` cannot resolve the bare plugin entry.
+    // cache, so `opencode debug config` is not required to resolve the package
+    // plugin entry in this path.
     // The installed plugin config hook is verified below directly from the
     // packaged artifact.
 
     console.log('Running installed CLI runtime-files smoke install...');
     const runtimeProjectDir = path.join(tempRoot, 'project-runtime');
     mkdirSync(runtimeProjectDir, { recursive: true });
-    run('node', [cliPath, 'install', '--dir', runtimeProjectDir, '--with-runtime-files', '--no-deps'], { cwd: packageDir });
+    run('node', [cliPath, 'install', '--dir', runtimeProjectDir, '--with-runtime-files', '--no-deps'], { cwd: packageDir, env: isolatedCacheEnv });
 
     const runtimeOpencodeConfig = readJsonc(path.join(runtimeProjectDir, 'opencode.jsonc'));
-    if (!isRecord(runtimeOpencodeConfig) || !Array.isArray(runtimeOpencodeConfig.plugin) || !runtimeOpencodeConfig.plugin.includes(packageName)) {
-      fail(`Runtime-files opencode.jsonc does not include bare plugin entry ${packageName}`);
+    if (!isRecord(runtimeOpencodeConfig) || !Array.isArray(runtimeOpencodeConfig.plugin) || !runtimeOpencodeConfig.plugin.includes(expectedPackagePluginEntry)) {
+      fail(`Runtime-files opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
     }
 
     for (const installedFile of runtimeAssetPaths()) {
@@ -192,7 +209,7 @@ function verifyFreshInstall(tarballPath: string) {
     `], { cwd: packageDir });
 
     console.log('Running installed doctor for runtime-files install...');
-    run('node', [cliPath, 'doctor', '--dir', runtimeProjectDir], { cwd: packageDir });
+    run('node', [cliPath, 'doctor', '--dir', runtimeProjectDir], { cwd: packageDir, env: isolatedCacheEnv });
 
     console.log('Running installed global install smoke test...');
     const globalConfigRoot = path.join(tempRoot, 'global-config');
@@ -205,8 +222,8 @@ function verifyFreshInstall(tarballPath: string) {
       },
     });
     const globalConfig = readJsonc(path.join(globalConfigRoot, 'opencode', 'opencode.jsonc'));
-    if (!isRecord(globalConfig) || !Array.isArray(globalConfig.plugin) || !globalConfig.plugin.includes(packageName)) {
-      fail(`Global opencode.jsonc does not include bare plugin entry ${packageName}`);
+    if (!isRecord(globalConfig) || !Array.isArray(globalConfig.plugin) || !globalConfig.plugin.includes(expectedPackagePluginEntry)) {
+      fail(`Global opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
     }
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
