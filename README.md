@@ -64,28 +64,39 @@ Legacy `CEREBRO_MODEL_FRONTIER`, `CEREBRO_MODEL_STRONG`, and `CEREBRO_MODEL_CODI
 
 ## Quick Start
 
-Install Open X-Men with bunx. By default, the installer adds the published `open-xmen` package to the OpenCode user config; the plugin registers commands and agents at load time:
+Install Open X-Men with `bunx`. The default install is **plugin-only**: it updates your OpenCode user config and lets the package plugin register commands and agents at load time.
 
 ```bash
 bunx open-xmen@latest install
 opencode .
 ```
 
-No setup slash command is required. Re-running the installer is safe: `OPENCODE_CONFIG_DIR/opencode.jsonc` (or `~/.config/opencode/opencode.jsonc` / `$XDG_CONFIG_HOME/opencode/opencode.jsonc`) is updated atomically with an `opencode.jsonc.bak` backup when it changes.
+No setup slash command is required, and no project `.opencode/`, `.cerebro/`, or `AGENTS.md` files are written by default.
+
+To refresh the OpenCode package cache, run the same command again:
+
+```bash
+bunx open-xmen@latest install
+```
+
+The installer rewrites the `open-xmen` plugin entry if needed and force-refreshes OpenCode's cached `open-xmen@latest` package, including stale `bun.lock` / `bun.lockb` files and `node_modules/open-xmen`.
 
 Useful installer flags:
 
 ```bash
 bunx open-xmen@latest install --global
-bunx open-xmen@latest install --with-runtime-files
 bunx open-xmen@latest install --dir /path/to/project
+bunx open-xmen@latest install --with-runtime-files --dir /path/to/project
 bunx open-xmen@latest install --dry-run
-bunx open-xmen@latest install --reset
-bunx open-xmen@latest install --force
+bunx open-xmen@latest install --with-runtime-files --reset
 bunx open-xmen@latest install --no-deps
 ```
 
-Use `--dir` or `--with-runtime-files` only if you want project-local files written into a project. Project-local installs set `default_agent` to `cerebro` in the generated `opencode.jsonc`.
+- `--global` is the default and installs into the OpenCode user config.
+- `--dir /path/to/project` writes only that project's `opencode.jsonc` and sets `default_agent` to `cerebro`.
+- `--with-runtime-files` is legacy/opt-in and writes managed `.opencode/`, `.cerebro/`, and `AGENTS.md` files into the selected project.
+- `--reset` / `--force` only matter with `--with-runtime-files`; they refresh existing managed files.
+- `--no-deps` skips the cache warm-up/refresh.
 
 For local development of this package:
 
@@ -119,15 +130,19 @@ open-xmen doctor [--dir <path>] [--json]
 open-xmen models
 ```
 
-- Omitting the subcommand defaults to `install`, matching `bunx open-xmen@latest install` behavior.
-- `--dry-run` prints planned writes and does not mutate the target config or project.
-- `--global` installs into the OpenCode user config; it is the default when `--dir` is omitted and `--with-runtime-files` is not set. The user config path honors `OPENCODE_CONFIG_DIR` first, then `XDG_CONFIG_HOME`, then `~/.config/opencode`.
-- `--dir` writes a project-local `opencode.jsonc` and makes `cerebro` the default agent for that project.
-- Re-run `bunx open-xmen@latest install` to refresh the OpenCode config entry and force-refresh the stale OpenCode package cache.
-- `--with-runtime-files` writes the legacy managed runtime files; without it, install creates no `.opencode/`, `.cerebro/`, or `AGENTS.md` files.
-- `--reset` / `--force` refresh existing managed files when `--with-runtime-files` is used.
-- `opencode.jsonc` writes are atomic via `opencode.jsonc.tmp` and create `opencode.jsonc.bak` before replacing an existing config.
-- `doctor --json` returns script-friendly diagnostics.
+| Command | Purpose |
+|---|---|
+| `open-xmen install` | Install or refresh the plugin entry and OpenCode package cache. This is also the manual upgrade path. |
+| `open-xmen doctor` | Validate the resolved OpenCode plugin install. Use `--json` for script-friendly diagnostics. |
+| `open-xmen models` | Print the current Cerebro model-slot mapping. |
+
+Install behavior:
+
+- Omitting the subcommand defaults to `install`.
+- Default/global install honors `OPENCODE_CONFIG_DIR`, then `XDG_CONFIG_HOME`, then `~/.config/opencode`.
+- Config writes are atomic via `opencode.jsonc.tmp`; an `opencode.jsonc.bak` backup is created before replacing an existing config.
+- There is no separate manual refresh command. Re-run `bunx open-xmen@latest install` to refresh the config entry and cached package.
+- Project runtime files are never written unless `--with-runtime-files` is explicitly passed.
 
 ## Commands
 
@@ -160,6 +175,13 @@ open-xmen models
 ---
 
 ## Runtime Files
+
+Runtime files are optional legacy managed files. The package plugin provides commands and agents without them. Use them only if you intentionally want repo-local markdown/runtime assets:
+
+```bash
+bunx open-xmen@latest install --dir /path/to/project --with-runtime-files
+bunx open-xmen@latest install --dir /path/to/project --with-runtime-files --reset
+```
 
 ```text
 .cerebro/
