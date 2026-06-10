@@ -646,6 +646,10 @@ export const CerebroPlugin: Plugin = async (input) => {
             });
             const childID = childSessionID(created);
             if (!childID) throw new Error("OpenCode SDK did not return a child session id");
+            await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+              at: now(), type: "child_session_started", from: "cerebro", to: args.agent,
+              child_session_id: childID, description: args.description,
+            });
             const slots = modelSlots();
             const selectedModel = args.model_slot ? slots[args.model_slot] : undefined;
             await client.session.promptAsync({
@@ -660,18 +664,23 @@ export const CerebroPlugin: Plugin = async (input) => {
             });
             return JSON.stringify({ dispatched: true, child_session_id: childID, agent: args.agent, model: selectedModel || "agent-default" }, null, 2);
           } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+              at: now(), type: "dispatch_failed", from: "cerebro", to: args.agent,
+              description: args.description, error: message,
+            }).catch(() => undefined);
             return JSON.stringify({
               dispatched: false,
               agent: args.agent,
               fallback: `Use @${args.agent} with the prompt supplied to cerebro_dispatch_agent.`,
-              error: error instanceof Error ? error.message : String(error),
+              error: message,
             }, null, 2);
           }
         },
       }),
 
       cerebro_agent_task: tool({
-        description: "Run a Cerebro agent in a child session, wait for its reply, record the result, and optionally update a task ledger entry.",
+        description: "Run a Cerebro agent in a child session, wait for its reply, record the result, and optionally update a task ledger entry. If aborted, the child_session_id is in the mailbox as a child_session_started record — use cerebro_collect_result to recover.",
         args: {
           run_id: tool.schema.string().min(1),
           task_id: tool.schema.string().optional(),
@@ -699,6 +708,10 @@ export const CerebroPlugin: Plugin = async (input) => {
             });
             const childID = childSessionID(created);
             if (!childID) throw new Error("OpenCode SDK did not return a child session id");
+            await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+              at: now(), type: "child_session_started", from: "cerebro", to: args.agent,
+              task_id: args.task_id, child_session_id: childID, description: args.description,
+            });
             const slots = modelSlots();
             const selectedModel = args.model_slot ? slots[args.model_slot] : undefined;
             const response = await client.session.prompt({
@@ -724,35 +737,91 @@ export const CerebroPlugin: Plugin = async (input) => {
               output,
             }, null, 2);
           } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+              at: now(), type: "agent_failed", from: args.agent, to: "cerebro", task_id: args.task_id, description: args.description, error: message,
+            });
             return JSON.stringify({
               completed: false,
               agent: args.agent,
               task_id: args.task_id,
-              fallback: `Use @${args.agent} with the supplied prompt, then record the result with cerebro_mailbox_send and cerebro_task_update.`,
-              error: error instanceof Error ? error.message : String(error),
+              fallback: "Check mailbox for a child_session_started record for this task — if one exists, use cerebro_collect_result with that child_session_id to recover. Otherwise use @" + args.agent + " directly, then record the result with cerebro_mailbox_send and cerebro_task_update.",
+              error: message,
             }, null, 2);
           }
         },
       }),
 
       cerebro_collect_result: tool({
-        description: "Collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry.",
+        description: "Collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry. Pass poll: true to block until the session stabilizes (up to 30 minutes) — required for multi-turn conductors like Cyclops.",
         args: {
           run_id: tool.schema.string().min(1),
           child_session_id: tool.schema.string().min(1),
           agent: tool.schema.enum(CEREBRO_AGENTS).optional(),
           task_id: tool.schema.string().optional(),
           limit: tool.schema.number().int().min(1).max(100).optional(),
+          poll: tool.schema.boolean().optional(),
         },
         async execute(args, toolContext) {
+          const POLL_INTERVAL_MS = 2000;
+          const MAX_POLL_MS = 30 * 60 * 1000;
+          const STABILITY_REQUIRED = 3;
+
           try {
             if (!hasChildSessionClient(client) || typeof client.session.messages !== "function") {
               throw new Error("OpenCode SDK client does not expose child session message listing");
             }
-            const response = await client.session.messages({
-              path: { id: args.child_session_id },
-              query: { directory: toolContext.directory, limit: args.limit ?? 20 },
-            });
+
+            let response: unknown;
+
+            if (args.poll) {
+              const startTime = Date.now();
+              let stablePolls = 0;
+              let lastMsgCount = 0;
+
+              while (true) {
+                if ((toolContext as unknown as { abort?: { aborted: boolean } }).abort?.aborted) {
+                  throw new Error("Task aborted during polling.");
+                }
+
+                response = await client.session.messages({
+                  path: { id: args.child_session_id },
+                  query: { directory: toolContext.directory, limit: 100 },
+                });
+
+                const messages = Array.isArray(resultData(response)) ? (resultData(response) as unknown[]) : [];
+                const currentCount = messages.length;
+                const currentOutput = assistantTextFromMessages(response);
+                const hasTerminal = Boolean(
+                  currentOutput && (currentOutput.includes("EXECUTION_COMPLETE") || currentOutput.includes("EXECUTION_BLOCKED"))
+                );
+
+                if (currentCount > 0 && currentCount === lastMsgCount) {
+                  stablePolls++;
+                  if (stablePolls >= STABILITY_REQUIRED || hasTerminal) break;
+                } else {
+                  stablePolls = 0;
+                  lastMsgCount = currentCount;
+                }
+
+                if (Date.now() - startTime >= MAX_POLL_MS) {
+                  return JSON.stringify({
+                    collected: false,
+                    child_session_id: args.child_session_id,
+                    timed_out: true,
+                    message: "Polling timed out after 30 minutes. Call cerebro_collect_result again to retry, or escalate as EXECUTION_BLOCKED.",
+                  }, null, 2);
+                }
+
+                await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+              }
+            } else {
+              response = await client.session.messages({
+                path: { id: args.child_session_id },
+                query: { directory: toolContext.directory, limit: args.limit ?? 20 },
+              });
+            }
+
             const output = assistantTextFromMessages(response);
             if (!output) {
               return JSON.stringify({ collected: false, child_session_id: args.child_session_id, message: "No assistant result found yet." }, null, 2);
@@ -768,10 +837,15 @@ export const CerebroPlugin: Plugin = async (input) => {
               output,
             }, null, 2);
           } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+              at: now(), type: "collect_failed", from: "cerebro", to: args.agent ?? "child-session",
+              child_session_id: args.child_session_id, task_id: args.task_id, error: message,
+            }).catch(() => undefined);
             return JSON.stringify({
               collected: false,
               child_session_id: args.child_session_id,
-              error: error instanceof Error ? error.message : String(error),
+              error: message,
             }, null, 2);
           }
         },

@@ -74,10 +74,20 @@ OpenCode does not provide Claude Code native `TeamCreate`, `TaskCreate`, `TaskUp
 
 1. Start a run with `cerebro_run_start`.
 2. Create and update tasks with `cerebro_task_create`, `cerebro_task_list`, and `cerebro_task_update`.
-3. Use `cerebro_agent_task` for specialized work that must return a result, or `cerebro_dispatch_agent` followed by `cerebro_collect_result` for async child sessions.
+3. Use `cerebro_agent_task` for single-turn agents (Legion, Cypher, Professor X, Wolverine, Jean Grey, Storm, Forge, Nightcrawler, Sage, Beast, Emma Frost). Use `cerebro_dispatch_agent` followed by `cerebro_collect_result(poll: true)` for multi-turn conductors (Cyclops).
 4. Record cross-agent decisions with `cerebro_mailbox_send`.
 5. Write durable progress with `cerebro_checkpoint` before compaction or long handoffs.
 6. Verify pending todos with `cerebro_verify_pending` before final synthesis.
+
+## Execution Visibility
+
+Before calling `cerebro_dispatch_agent` or `cerebro_agent_task`, output a one-line announcement:
+`→ [Cerebro] Dispatching {agent} — {description}`
+
+After `cerebro_collect_result` or `cerebro_agent_task` returns, output a one-line confirmation:
+`✓ [Cerebro] {agent} complete — {brief summary}`
+
+This keeps the user informed during long executions where tool calls are opaque spinners.
 
 ## Safety and Quality
 

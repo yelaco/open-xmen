@@ -81,10 +81,20 @@ OpenCode does not provide Claude Code native \`TeamCreate\`, \`TaskCreate\`, \`T
 
 1. Start a run with \`cerebro_run_start\`.
 2. Create and update tasks with \`cerebro_task_create\`, \`cerebro_task_list\`, and \`cerebro_task_update\`.
-3. Use \`cerebro_agent_task\` for specialized work that must return a result, or \`cerebro_dispatch_agent\` followed by \`cerebro_collect_result\` for async child sessions.
+3. Use \`cerebro_agent_task\` for single-turn agents (Legion, Cypher, Professor X, Wolverine, Jean Grey, Storm, Forge, Nightcrawler, Sage, Beast, Emma Frost). Use \`cerebro_dispatch_agent\` followed by \`cerebro_collect_result(poll: true)\` for multi-turn conductors (Cyclops).
 4. Record cross-agent decisions with \`cerebro_mailbox_send\`.
 5. Write durable progress with \`cerebro_checkpoint\` before compaction or long handoffs.
 6. Verify pending todos with \`cerebro_verify_pending\` before final synthesis.
+
+## Execution Visibility
+
+Before calling \`cerebro_dispatch_agent\` or \`cerebro_agent_task\`, output a one-line announcement:
+\`→ [Cerebro] Dispatching {agent} — {description}\`
+
+After \`cerebro_collect_result\` or \`cerebro_agent_task\` returns, output a one-line confirmation:
+\`✓ [Cerebro] {agent} complete — {brief summary}\`
+
+This keeps the user informed during long executions where tool calls are opaque spinners.
 
 ## Safety and Quality
 
@@ -2843,10 +2853,11 @@ Execute or resume the latest Cerebro plan.
 2. Read the newest \`.cerebro/plans/*.md\`, \`.cerebro/project-context.md\` if present, \`.cerebro/boulder.json\` if present, and relevant \`.cerebro/notepads/\`.
 3. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-start-work\`, objective from the plan, and the plan risk.
 4. Create task records for each task in the plan. Each task must have a \`category\` field (visual-engineering | architecture | explore | research | deep | quick).
-5. **Run Cyclops as execution conductor through \`cerebro_agent_task\`**: hand off the full task list, run_id, and plan context. Cyclops owns all worker routing, sequencing, todo tracking, wisdom accumulation, child-session result collection, and result verification from this point.
+5. **Dispatch Cyclops as execution conductor**: call \`cerebro_dispatch_agent\` (agent=cyclops) with the full task list, run_id, and plan context, then immediately call \`cerebro_collect_result\` with the returned \`child_session_id\` and \`poll: true\`. This blocks until Cyclops emits EXECUTION_COMPLETE or EXECUTION_BLOCKED (up to 30 minutes). Cyclops owns all worker routing, sequencing, todo tracking, wisdom accumulation, child-session result collection, and result verification from this point.
    - Cyclops routes by category: visual-engineering→Jean Grey→Wolverine→Storm, architecture→Forge, explore→Nightcrawler, research→Sage, deep/quick/default→Wolverine.
    - Cyclops handles retries (max 2 per task) and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
-6. On EXECUTION_BLOCKED: unblock or escalate; re-run Cyclops through \`cerebro_agent_task\` to resume from the blocked task.
+   - **If dispatch fails or polling times out: report EXECUTION_BLOCKED to the user — do NOT route tasks yourself.**
+6. On EXECUTION_BLOCKED: unblock or escalate; re-dispatch Cyclops via \`cerebro_dispatch_agent\` + \`cerebro_collect_result(poll: true)\` to resume from the blocked task.
 7. Record decisions and blockers with \`cerebro_mailbox_send\`; update task state with \`cerebro_task_update\`.
 8. Update \`.cerebro/boulder.json\` with status, approvals, verification history, and decisions.
 9. **Legion acceptance** (product-shaped plans only): if the plan includes user-facing acceptance criteria or was derived from Legion/Cypher notepads, run Legion through \`cerebro_agent_task\` for a final customer acceptance verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-runs Cyclops before the run completes.
@@ -2872,8 +2883,8 @@ The user has given one prompt and expects a complete result with no further ques
 5. **Professor X**: draft the plan from \`REQUIREMENTS_READY\` using \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task must include a \`Category\` field (visual-engineering | architecture | explore | research | deep | quick).
 6. **Beast**: gap review. **Emma Frost**: validate if HIGH risk, auth, billing, migration, or data-integrity work.
 7. Write approved plan to \`.cerebro/plans/{slug}.md\`.
-8. Create task records and **run Cyclops as execution conductor through \`cerebro_agent_task\`**: hand off the full task list, run_id, and plan. Cyclops routes by category, manages worker sequencing, tracks wisdom, collects worker results, verifies results, and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
-9. On EXECUTION_BLOCKED: resolve autonomously if possible; escalate to user only if truly unresolvable.
+8. Create task records and **dispatch Cyclops as execution conductor**: call \`cerebro_dispatch_agent\` (agent=cyclops) with the full task list, run_id, and plan, then immediately call \`cerebro_collect_result\` with the returned \`child_session_id\` and \`poll: true\`. Cyclops routes by category, manages worker sequencing, tracks wisdom, collects worker results, verifies results, and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED. **If dispatch fails or polling times out: report EXECUTION_BLOCKED — do NOT route tasks yourself.**
+9. On EXECUTION_BLOCKED: resolve autonomously if possible; re-dispatch Cyclops via \`cerebro_dispatch_agent\` + \`cerebro_collect_result(poll: true)\` to resume; escalate to user only if truly unresolvable.
 10. **Legion acceptance** (product-shaped work only): run Legion through \`cerebro_agent_task\` for a final customer verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-runs Cyclops.
 11. Call \`cerebro_verify_pending\`; final-report only when todos are clear or explicitly blocked.
 
