@@ -1,12 +1,30 @@
 import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
-import type { Part, Permission } from "@opencode-ai/sdk";
+import type { Permission } from "@opencode-ai/sdk";
 import { appendFile, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import type { AgentDefinition } from "./agents/index.js";
+import {
+  createBeastAgent,
+  createCerebroAgent,
+  createCyclopsAgent,
+  createCypherAgent,
+  createEmmaFrostAgent,
+  createForgeAgent,
+  createJeanGreyAgent,
+  createLegionAgent,
+  createNightcrawlerAgent,
+  createProfessorXAgent,
+  createSageAgent,
+  createStormAgent,
+  createWolverineAgent,
+} from "./agents/index.js";
+import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
 import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, modelSlots } from "./config/models.js";
+import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent } from "./auto-update.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
 const RISKS = [...CEREBRO_RISKS] as const;
@@ -17,6 +35,18 @@ const MAX_PENDING_FILES = 500;
 const MAX_PENDING_FILE_BYTES = 64 * 1024;
 type Risk = (typeof RISKS)[number];
 type TaskStatus = (typeof TASK_STATUSES)[number];
+
+type OpenCodeConfig = Record<string, unknown> & {
+  command?: Record<string, {
+    template: string;
+    description?: string;
+    agent?: string;
+    model?: string;
+    variant?: string;
+    subtask?: boolean;
+  }>;
+  agent?: Record<string, Record<string, unknown> | undefined>;
+};
 
 type RuntimeContext = {
   worktree: string;
@@ -123,6 +153,57 @@ function parseModelID(model: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function defaultAgentDefinitions() {
+  return [
+    createCerebroAgent(),
+    createLegionAgent(),
+    createCypherAgent(),
+    createProfessorXAgent(),
+    createWolverineAgent(),
+    createJeanGreyAgent(),
+    createStormAgent(),
+    createCyclopsAgent(),
+    createForgeAgent(),
+    createNightcrawlerAgent(),
+    createSageAgent(),
+    createBeastAgent(),
+    createEmmaFrostAgent(),
+  ];
+}
+
+function toConfigAgent(definition: AgentDefinition): Record<string, unknown> {
+  const { config, description, opencode } = definition;
+  const meta = opencode ?? {};
+  return {
+    ...config,
+    ...(description ? { description } : {}),
+    ...(meta.mode ? { mode: meta.mode } : {}),
+    ...(meta.variant ? { variant: meta.variant } : {}),
+    ...(meta.steps !== undefined ? { steps: meta.steps } : {}),
+    ...(meta.permission ? { permission: meta.permission } : {}),
+    ...(definition._modelArray && definition._modelArray.length > 1
+      ? { options: { ...(isRecord(config.options) ? config.options : {}), model_fallbacks: definition._modelArray.slice(1).map(({ id }) => id) } }
+      : {}),
+  };
+}
+
+function registerCerebroConfig(input: OpenCodeConfig) {
+  input.command ??= {};
+  for (const command of CEREBRO_COMMAND_DEFINITIONS) {
+    input.command[command.name] ??= {
+      template: command.content,
+      description: command.description,
+      agent: "cerebro",
+      model: command.model,
+    };
+  }
+
+  input.agent ??= {};
+  for (const agent of defaultAgentDefinitions()) {
+    input.agent[agent.name] ??= toConfigAgent(agent);
+  }
 }
 
 function assertSafeName(value: string, label: string) {
@@ -245,9 +326,11 @@ async function saveTasks(ctx: RuntimeContext, runId: string, tasks: TaskRecord[]
   await writeJson(taskFile(ctx, runId), tasks);
 }
 
-export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => {
+export const CerebroPlugin: Plugin = async (input) => {
+  const { worktree, directory, client } = input;
   const ctx = { worktree, directory };
   let sessionCheckDone = false;
+  let autoUpdateScheduled = false;
 
   // Serialises load→mutate→save cycles per run_id to prevent concurrent writes clobbering each other.
   const taskLocks = new Map<string, Promise<unknown>>();
@@ -286,6 +369,16 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
   }
 
   return {
+    async event({ event }) {
+      if (autoUpdateScheduled || !shouldRunAutoUpdateForEvent(event)) return;
+      autoUpdateScheduled = true;
+      scheduleOpenXmenAutoUpdate(input);
+    },
+
+    async config(input) {
+      registerCerebroConfig(input as OpenCodeConfig);
+    },
+
     async "permission.ask"(input: Permission, output) {
       const pattern = Array.isArray(input.pattern) ? input.pattern[0] : (input.pattern ?? "");
       if (pattern && isSecretPath(pattern)) {
@@ -340,18 +433,13 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
     async "command.execute.before"(input, output) {
       const command = input.command.startsWith("/") ? input.command : `/${input.command}`;
       if (!COMMANDS.has(command)) return;
-      output.parts.unshift({
-        id: `cerebro-command-${input.sessionID}`,
-        sessionID: input.sessionID,
-        messageID: `cerebro-command-${input.command}`,
-        type: "text",
-        text: [
-          "Cerebro OpenCode runtime is active.",
-          "Before acting, use the Cerebro coordination tools for run state, mailbox, checkpoints, pending-todo checks, and model-slot lookup.",
-          "Runtime root: `.cerebro/`. Preserve command names and role names.",
-        ].join("\n"),
-        synthetic: true,
-      } satisfies Part);
+      const prelude = [
+        "Cerebro OpenCode runtime is active.",
+        "Before acting, use the Cerebro coordination tools for run state, mailbox, checkpoints, pending-todo checks, and model-slot lookup.",
+        "Runtime root: `.cerebro/`. Preserve command names and role names.",
+      ].join("\n");
+      const firstText = output.parts.find((part) => part.type === "text");
+      if (firstText && "text" in firstText) firstText.text = `${prelude}\n\n${firstText.text}`;
     },
 
     async "tool.execute.before"(input, output) {

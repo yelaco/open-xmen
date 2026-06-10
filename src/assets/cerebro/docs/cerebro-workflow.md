@@ -45,7 +45,6 @@ flowchart TB
 | `/cerebro-index` | Build or refresh repository context. |
 | `/cerebro-plan [task]` | Interview-first planning with Professor X. |
 | `/cerebro-start-work` | Execute or resume the latest Cerebro plan. |
-| `/cerebro-doctor` | Validate command names, model routing, OpenCode agents/commands, plugin bridge, schemas, and runtime health. |
 
 ## State Files
 
@@ -80,7 +79,7 @@ flowchart TB
 
 ## Package Updates
 
-Open X-Men is package-managed. To update managed runtime files: `bunx open-xmen@latest update`.
+Open X-Men is package-managed. To refresh the plugin package/config cache: `bunx open-xmen@latest install`. Use `install --with-runtime-files --reset` only for legacy managed runtime files.
 
 ## Skills
 

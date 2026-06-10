@@ -1,14 +1,30 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const PACKAGE_NAME = "open-xmen";
+const PACKAGE_CACHE_TAG = "latest";
 const OPENCODE_INSTRUCTIONS = ["AGENTS.md", ".cerebro/cerebro-identity.md", ".cerebro/opencode/model-routing.md"];
 
 type JsonObject = { [key: string]: JsonValue };
 type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 
-export function updateOpencodeConfig(target: string, opts: { dryRun: boolean; planned: string[] }) {
+export type UpdateOpenCodeConfigOptions = {
+  dryRun: boolean;
+  planned: string[];
+  defaultAgent?: string;
+  includeRuntimeInstructions?: boolean;
+  setCerebroDefaults?: boolean;
+};
+
+export function globalOpenCodeConfigDir() {
+  if (process.env.OPENCODE_CONFIG_DIR) return path.resolve(process.env.OPENCODE_CONFIG_DIR);
+  const configHome = process.env.XDG_CONFIG_HOME || (process.env.HOME ? path.join(process.env.HOME, ".config") : undefined);
+  if (!configHome) throw new Error("Cannot resolve OpenCode global config directory: HOME is not set");
+  return path.join(configHome, "opencode");
+}
+
+export function updateOpencodeConfig(target: string, opts: UpdateOpenCodeConfigOptions) {
   const destination = path.join(target, "opencode.jsonc");
   let parsed: JsonValue = {};
   if (existsSync(destination)) {
@@ -21,10 +37,17 @@ export function updateOpencodeConfig(target: string, opts: { dryRun: boolean; pl
   const config: JsonObject = isRecord(parsed) ? parsed : {};
   config.$schema ||= "https://opencode.ai/config.json";
   config.plugin = replaceOpenXmenPluginEntries(asArray(config.plugin), getPluginEntry());
-  config.instructions = appendUnique(asArray(config.instructions), ...OPENCODE_INSTRUCTIONS);
-  config.default_agent ??= "cerebro";
-  config.share ??= "disabled";
-  config.permission ??= { edit: "ask", bash: "ask", webfetch: "ask", task: "ask", question: "allow" };
+  if (opts.defaultAgent) {
+    config.default_agent ||= opts.defaultAgent;
+  }
+  if (opts.includeRuntimeInstructions) {
+    config.instructions = appendUnique(asArray(config.instructions), ...OPENCODE_INSTRUCTIONS);
+  }
+  if (opts.setCerebroDefaults) {
+    config.default_agent ??= "cerebro";
+    config.share ??= "disabled";
+    config.permission ??= { edit: "ask", bash: "ask", webfetch: "ask", task: "ask", question: "allow" };
+  }
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
   if (opts.dryRun) {
@@ -36,22 +59,40 @@ export function updateOpencodeConfig(target: string, opts: { dryRun: boolean; pl
 }
 
 export function warmOpenCodePluginCache(packageRoot: string) {
-  if (!isPackageManagerInstall(packageRoot)) {
+  if (isLocalDevelopmentCheckout(packageRoot)) {
     console.log("Local development install - cache warm-up not required");
     return;
   }
   const home = process.env.HOME;
   if (!home) return;
-  let version = "latest";
-  const packageJson = readJsonFile(path.join(packageRoot, "package.json"));
-  if (isRecord(packageJson) && typeof packageJson.version === "string") version = packageJson.version;
   const cacheRoot = process.env.XDG_CACHE_HOME || path.join(home, ".cache");
-  const cacheDir = path.join(cacheRoot, "opencode", "packages", `${PACKAGE_NAME}@${version}`);
+  const cacheDir = path.join(cacheRoot, "opencode", "packages", `${PACKAGE_NAME}@${PACKAGE_CACHE_TAG}`);
   mkdirSync(cacheDir, { recursive: true });
-  writeFileSync(path.join(cacheDir, "package.json"), `${JSON.stringify({ name: `${PACKAGE_NAME}-cache`, private: true, dependencies: { [PACKAGE_NAME]: version } }, null, 2)}\n`, "utf8");
-  const bun = spawnSync("bun", ["install", "--ignore-scripts"], { cwd: cacheDir, stdio: "inherit" });
-  if (bun.status !== 0) console.warn("open-xmen install: skipped OpenCode plugin cache warm-up; bun install failed");
-  else console.log(`OpenCode plugin cache warmed: ${cacheDir}`);
+  if (process.env.OPEN_XMEN_SEED_OPENCODE_CACHE === "1" && seedOpenCodePluginCache(cacheDir, packageRoot)) {
+    console.log(`OpenCode plugin cache warmed: ${cacheDir}`);
+    return;
+  }
+  if (installOpenXmenPackageWorkspace(cacheDir, { forceRefresh: true, stdio: "inherit" })) {
+    console.log(`OpenCode plugin cache warmed: ${cacheDir}`);
+  } else {
+    console.warn("open-xmen install: skipped OpenCode plugin cache warm-up; bun install failed");
+  }
+}
+
+export function installOpenXmenPackageWorkspace(workspaceDir: string, opts: { forceRefresh?: boolean; stdio?: "inherit" | "pipe" } = {}) {
+  mkdirSync(workspaceDir, { recursive: true });
+  writeFileSync(path.join(workspaceDir, "package.json"), `${JSON.stringify({
+    name: `${PACKAGE_NAME}-cache`,
+    private: true,
+    dependencies: { [PACKAGE_NAME]: PACKAGE_CACHE_TAG },
+  }, null, 2)}\n`, "utf8");
+  if (opts.forceRefresh) {
+    rmSync(path.join(workspaceDir, "bun.lock"), { force: true });
+    rmSync(path.join(workspaceDir, "bun.lockb"), { force: true });
+    rmSync(path.join(workspaceDir, "node_modules", PACKAGE_NAME), { recursive: true, force: true });
+  }
+  const bun = spawnSync("bun", ["install", "--ignore-scripts"], { cwd: workspaceDir, encoding: "utf8", stdio: opts.stdio ?? "inherit" });
+  return bun.status === 0;
 }
 
 export function opencodeConfigHasOpenXmenPlugin(cwd = process.cwd()) {
@@ -84,8 +125,9 @@ function getPluginEntry() {
   const cliEntryPath = process.argv[1];
   if (!cliEntryPath) return PACKAGE_NAME;
   const packageRoot = findPackageRoot(cliEntryPath);
-  if (!packageRoot || isPackageManagerInstall(packageRoot)) return PACKAGE_NAME;
-  return packageRoot;
+  if (!packageRoot) return PACKAGE_NAME;
+  if (isLocalDevelopmentCheckout(packageRoot)) return packageRoot;
+  return PACKAGE_NAME;
 }
 
 function replaceOpenXmenPluginEntries(items: JsonValue[], pluginEntry: string): JsonValue[] {
@@ -121,8 +163,23 @@ function isLocalPackageRootEntry(entry: string) {
   return isRecord(packageJson) && packageJson.name === PACKAGE_NAME;
 }
 
-function isPackageManagerInstall(packageRoot: string) {
-  return packageRoot.replaceAll("\\", "/").includes(`/node_modules/${PACKAGE_NAME}`);
+function isLocalDevelopmentCheckout(packageRoot: string) {
+  return existsSync(path.join(packageRoot, ".git"));
+}
+
+function seedOpenCodePluginCache(cacheDir: string, packageRoot: string) {
+  const sourceNodeModules = path.dirname(packageRoot);
+  if (path.basename(sourceNodeModules) !== "node_modules") return false;
+  if (!existsSync(path.join(sourceNodeModules, PACKAGE_NAME, "package.json"))) return false;
+  try {
+    const targetNodeModules = path.join(cacheDir, "node_modules");
+    rmSync(targetNodeModules, { recursive: true, force: true });
+    cpSync(sourceNodeModules, targetNodeModules, { recursive: true, dereference: true });
+    return true;
+  } catch (error) {
+    console.warn(`open-xmen install: could not seed OpenCode plugin cache from installed package; falling back to bun install (${error instanceof Error ? error.message : String(error)})`);
+    return false;
+  }
 }
 
 function readJsonFile(file: string): JsonValue | undefined {

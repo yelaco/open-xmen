@@ -34,7 +34,7 @@
     },
     "command": {
       "type": "string",
-      "enum": ["/to-me-my-x-men", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index", "/cerebro-doctor"]
+      "enum": ["/to-me-my-x-men", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index"]
     },
     "status": {
       "type": "string",

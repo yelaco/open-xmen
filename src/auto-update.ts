@@ -1,0 +1,253 @@
+import type { PluginInput } from "@opencode-ai/plugin";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { installOpenXmenPackageWorkspace } from "./cli/config.js";
+
+const PACKAGE_NAME = "open-xmen";
+const NPM_DIST_TAGS_URL = `https://registry.npmjs.org/-/package/${PACKAGE_NAME}/dist-tags`;
+const FETCH_TIMEOUT_MS = 5_000;
+const EXACT_SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+type AutoUpdateResult =
+  | { status: "updated"; currentVersion: string; latestVersion: string; workspace: string }
+  | { status: "skipped"; reason: string; currentVersion?: string; latestVersion?: string }
+  | { status: "failed"; reason: string; currentVersion?: string; latestVersion?: string; workspace?: string };
+
+export function shouldRunAutoUpdateForEvent(event: { type?: string; properties?: unknown }) {
+  if (event.type !== "session.created") return false;
+  if (process.env.OPENCODE_CLI_RUN_MODE === "true") return false;
+  if (parentSessionId(event.properties)) return false;
+  return true;
+}
+
+export function scheduleOpenXmenAutoUpdate(ctx: PluginInput) {
+  const timeout = setTimeout(() => {
+    void runOpenXmenAutoUpdate(ctx).catch((error) => {
+      console.warn(`open-xmen auto-update check failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }, 5_000);
+  timeout.unref?.();
+}
+
+export async function runOpenXmenAutoUpdate(ctx: PluginInput): Promise<AutoUpdateResult> {
+  if (process.env.OPEN_XMEN_SKIP_AUTO_UPGRADE === "1" || process.env.OPEN_XMEN_AUTO_UPGRADE === "0") {
+    return { status: "skipped", reason: "disabled" };
+  }
+
+  const packageRoot = findPackageRoot(path.dirname(fileURLToPath(import.meta.url)));
+  if (!packageRoot) return { status: "skipped", reason: "package-root-not-found" };
+  if (existsSync(path.join(packageRoot, ".git"))) return { status: "skipped", reason: "local-development" };
+
+  const packageJson = readJson(path.join(packageRoot, "package.json"));
+  const currentVersion = isRecord(packageJson) && typeof packageJson.version === "string" ? packageJson.version : undefined;
+  if (!currentVersion) return { status: "skipped", reason: "current-version-not-found" };
+
+  const pluginEntry = findPluginEntry(ctx.directory);
+  if (!pluginEntry) return { status: "skipped", reason: "plugin-entry-not-found", currentVersion };
+  if (pluginEntry.isPinned) {
+    const latestVersion = await fetchLatestVersion();
+    if (latestVersion && compareSemver(latestVersion, currentVersion) > 0) {
+      await showToast(ctx, "Open X-Men update available", `${latestVersion} is available, but your plugin entry is pinned to ${pluginEntry.entry}.`, "warning");
+    }
+    return { status: "skipped", reason: "pinned-plugin-entry", currentVersion, latestVersion };
+  }
+
+  const latestVersion = await fetchLatestVersion();
+  if (!latestVersion) return { status: "skipped", reason: "latest-version-not-found", currentVersion };
+  if (compareSemver(latestVersion, currentVersion) <= 0) return { status: "skipped", reason: "already-current", currentVersion, latestVersion };
+
+  const workspace = moduleHostingWorkspace(packageRoot);
+  if (!workspace) return { status: "failed", reason: "install-workspace-not-found", currentVersion, latestVersion };
+
+  await showToast(ctx, "Updating Open X-Men", `Installing ${PACKAGE_NAME}@latest (${currentVersion} → ${latestVersion})...`, "info");
+  const installed = installOpenXmenPackageWorkspace(workspace, { forceRefresh: true, stdio: "pipe" });
+  if (!installed) {
+    await showToast(ctx, "Open X-Men update failed", `${latestVersion} is available. Run: bunx ${PACKAGE_NAME}@latest install`, "warning");
+    return { status: "failed", reason: "bun-install-failed", currentVersion, latestVersion, workspace };
+  }
+
+  await showToast(ctx, "Open X-Men updated", `${currentVersion} → ${latestVersion}. Restart OpenCode to use the new plugin code.`, "success");
+  return { status: "updated", currentVersion, latestVersion, workspace };
+}
+
+async function fetchLatestVersion() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  timeout.unref?.();
+  try {
+    const response = await fetch(NPM_DIST_TAGS_URL, { signal: controller.signal, headers: { Accept: "application/json" } });
+    if (!response.ok) return undefined;
+    const tags = await response.json();
+    return isRecord(tags) && typeof tags.latest === "string" ? tags.latest : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function findPluginEntry(directory: string) {
+  for (const configPath of configPaths(directory)) {
+    const config = readJsonc(configPath);
+    if (!isRecord(config)) continue;
+    const plugins = Array.isArray(config.plugin) ? config.plugin : [];
+    for (const plugin of plugins) {
+      const entry = Array.isArray(plugin) ? plugin[0] : plugin;
+      if (typeof entry !== "string") continue;
+      if (entry === PACKAGE_NAME) return { entry, isPinned: false };
+      if (entry.startsWith(`${PACKAGE_NAME}@`)) {
+        const spec = entry.slice(PACKAGE_NAME.length + 1).trim();
+        return { entry, isPinned: EXACT_SEMVER.test(spec) };
+      }
+      if (isLocalPackageRootEntry(entry)) return { entry, isPinned: true };
+    }
+  }
+  return undefined;
+}
+
+function configPaths(directory: string) {
+  const paths = [path.join(directory, "opencode.jsonc"), path.join(directory, "opencode.json")];
+  const globalConfigDir = process.env.OPENCODE_CONFIG_DIR || (process.env.XDG_CONFIG_HOME
+    ? path.join(process.env.XDG_CONFIG_HOME, "opencode")
+    : process.env.HOME
+      ? path.join(process.env.HOME, ".config", "opencode")
+      : undefined);
+  if (globalConfigDir) paths.push(path.join(globalConfigDir, "opencode.jsonc"), path.join(globalConfigDir, "opencode.json"));
+  return [...new Set(paths)];
+}
+
+function readJson(file: string): JsonValue | undefined {
+  if (!existsSync(file)) return undefined;
+  try {
+    return JSON.parse(readFileSync(file, "utf8")) as JsonValue;
+  } catch {
+    return undefined;
+  }
+}
+
+function readJsonc(file: string): JsonValue | undefined {
+  if (!existsSync(file)) return undefined;
+  try {
+    return JSON.parse(removeTrailingCommas(stripJsonComments(readFileSync(file, "utf8")))) as JsonValue;
+  } catch {
+    return undefined;
+  }
+}
+
+function findPackageRoot(startPath: string) {
+  let current = startPath;
+  while (true) {
+    const packageJson = readJson(path.join(current, "package.json"));
+    if (isRecord(packageJson) && packageJson.name === PACKAGE_NAME) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+function moduleHostingWorkspace(packageRoot: string) {
+  const nodeModulesDir = path.dirname(packageRoot);
+  if (path.basename(nodeModulesDir) !== "node_modules") return undefined;
+  return path.dirname(nodeModulesDir);
+}
+
+function isLocalPackageRootEntry(entry: string) {
+  const packageJson = readJson(path.join(entry, "package.json"));
+  return isRecord(packageJson) && packageJson.name === PACKAGE_NAME;
+}
+
+function compareSemver(a: string, b: string) {
+  const left = a.split(/[+-]/)[0].split(".").map((part) => Number.parseInt(part, 10));
+  const right = b.split(/[+-]/)[0].split(".").map((part) => Number.parseInt(part, 10));
+  for (let i = 0; i < 3; i++) {
+    const diff = (left[i] || 0) - (right[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return a.localeCompare(b);
+}
+
+async function showToast(ctx: PluginInput, title: string, message: string, variant: "info" | "success" | "warning" | "error") {
+  const tui = isRecord(ctx.client) ? ctx.client.tui : undefined;
+  if (!isRecord(tui) || typeof tui.showToast !== "function") return;
+  try {
+    await tui.showToast({ body: { title, message, variant, duration: 8_000 }, query: { directory: ctx.directory } });
+  } catch {
+    // Toasts are best-effort only; update checks should never block OpenCode startup.
+  }
+}
+
+function parentSessionId(properties: unknown) {
+  if (!isRecord(properties)) return undefined;
+  const info = properties.info;
+  if (!isRecord(info)) return undefined;
+  return typeof info.parentID === "string" && info.parentID ? info.parentID : undefined;
+}
+
+function stripJsonComments(text: string) {
+  let out = "";
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (inString) {
+      out += ch;
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      while (i < text.length && text[i] !== "\n") i++;
+      out += "\n";
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      i += 2;
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
+      i++;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+function removeTrailingCommas(text: string) {
+  let out = "";
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      out += ch;
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      continue;
+    }
+    if (ch === ",") {
+      let j = i + 1;
+      while (/\s/.test(text[j] || "")) j++;
+      if (text[j] === "}" || text[j] === "]") continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

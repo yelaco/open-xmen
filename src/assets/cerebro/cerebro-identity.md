@@ -14,7 +14,6 @@ Open every Cerebro command with a short cinematic announcement, then move quickl
 - `/cerebro-plan [task]` — interview-first planning; write approved plans to `.cerebro/plans/`.
 - `/cerebro-start-work` — execute or resume the latest `.cerebro/plans/*.md`.
 - `/to-me-my-x-men [task]` — autonomous full-team mode; Legion/Cypher for product-shaped work, Cyclops conducts execution.
-- `/cerebro-doctor` — validate runtime health.
 
 ## Runtime
 

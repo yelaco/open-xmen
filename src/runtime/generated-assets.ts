@@ -21,7 +21,6 @@ Open every Cerebro command with a short cinematic announcement, then move quickl
 - \`/cerebro-plan [task]\` — interview-first planning; write approved plans to \`.cerebro/plans/\`.
 - \`/cerebro-start-work\` — execute or resume the latest \`.cerebro/plans/*.md\`.
 - \`/to-me-my-x-men [task]\` — autonomous full-team mode; Legion/Cypher for product-shaped work, Cyclops conducts execution.
-- \`/cerebro-doctor\` — validate runtime health.
 
 ## Runtime
 
@@ -135,7 +134,6 @@ This runtime uses X-Men names for OpenCode specialist prompts. The names are par
 ├── commands/
 │   ├── cerebro-plan.md
 │   ├── cerebro-start-work.md
-│   ├── cerebro-doctor.md
 │   ├── cerebro-index.md
 │   └── to-me-my-x-men.md
 └── plugins/
@@ -198,7 +196,6 @@ flowchart TB
 | \`/cerebro-index\` | Build or refresh repository context. |
 | \`/cerebro-plan [task]\` | Interview-first planning with Professor X. |
 | \`/cerebro-start-work\` | Execute or resume the latest Cerebro plan. |
-| \`/cerebro-doctor\` | Validate command names, model routing, OpenCode agents/commands, plugin bridge, schemas, and runtime health. |
 
 ## State Files
 
@@ -233,7 +230,7 @@ flowchart TB
 
 ## Package Updates
 
-Open X-Men is package-managed. To update managed runtime files: \`bunx open-xmen@latest update\`.
+Open X-Men is package-managed. To refresh the plugin package/config cache: \`bunx open-xmen@latest install\`. Use \`install --with-runtime-files --reset\` only for legacy managed runtime files.
 
 ## Skills
 
@@ -321,7 +318,6 @@ Legacy \`.claude/\` files may exist as migration source or compatibility materia
 /cerebro-index
 /cerebro-plan redesign the authentication flow
 /cerebro-start-work
-/cerebro-doctor
 \`\`\`
 
 ## Working Modes
@@ -333,9 +329,8 @@ Legacy \`.claude/\` files may exist as migration source or compatibility materia
 | Autonomous | \`/to-me-my-x-men [task]\` | The task is clear and should be executed end to end. |
 | Planning | \`/cerebro-plan [task]\` | Requirements are complex, ambiguous, high-impact, or need approval. |
 | Execution | \`/cerebro-start-work\` | A plan exists and should be executed or resumed. |
-| Doctor | \`/cerebro-doctor\` | Validate workflow health and catch command/model/runtime drift. |
 
-Package updates are npm-managed. Run \`bunx open-xmen@latest update\` to refresh managed runtime files.
+Package updates are npm-managed. Re-run \`bunx open-xmen@latest install\` to refresh the plugin config/cache without writing project runtime files. Use \`install --with-runtime-files --reset\` only when you intentionally want to refresh legacy managed \`.opencode/\`, \`.cerebro/\`, and \`AGENTS.md\` files.
 
 When \`/to-me-my-x-men\` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and Cyclops coordinates verified execution.
 
@@ -637,7 +632,7 @@ Use \`orchestrator\` for Cerebro command interpretation, \`conductor\` for Cyclo
     },
     "command": {
       "type": "string",
-      "enum": ["/to-me-my-x-men", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index", "/cerebro-doctor"]
+      "enum": ["/to-me-my-x-men", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index"]
     },
     "status": {
       "type": "string",
@@ -1224,7 +1219,6 @@ REQUIRED_COMMANDS = {
     "cerebro-index",
     "cerebro-plan",
     "cerebro-start-work",
-    "cerebro-doctor",
     "to-me-my-x-men",
 }
 MODEL_PATTERN = re.compile(r"(?:openai|anthropic|minimax)/[A-Za-z0-9._/-]+")
@@ -1356,7 +1350,6 @@ ALLOWED_COMMANDS = {
     "/cerebro-plan",
     "/cerebro-start-work",
     "/cerebro-index",
-    "/cerebro-doctor",
 }
 ALLOWED_STATUSES = {"planning", "running", "blocked", "completed", "cleaned_up"}
 ALLOWED_RISKS = {"LOW", "MEDIUM", "HIGH"}
@@ -2789,26 +2782,6 @@ Use TDD when practical. Maintain task-scoped todos under .cerebro/pending-todos/
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
-  { path: ".opencode/commands/cerebro-doctor.md", content: `---
-description: Validate Cerebro OpenCode runtime health.
-agent: cerebro
-model: openai/gpt-5.5
----
-Validate the Cerebro OpenCode workflow. Do not modify source files except temporary runtime files needed for safe checks.
-
-Check and report PASS/FAIL for:
-
-1. \`opencode.jsonc\` exists and loads the \`open-xmen\` plugin package or local \`.opencode/plugins/open-xmen.ts\` development bridge.
-2. \`.opencode/agents/\` contains all Cerebro role agents.
-3. \`.opencode/commands/\` contains preserved command names.
-4. \`.cerebro/cerebro-identity.md\`, schemas, templates, plans, notepads, and team-runs exist.
-5. \`cerebro_model_slots\` returns canonical role slots only: orchestrator, conductor, planner, design, analyst, workers, fast, image.
-6. Result tools exist and are usable by the runtime contract: \`cerebro_agent_task\`, \`cerebro_collect_result\`, and \`cerebro_dispatch_agent\`.
-7. \`cerebro_verify_pending\` correctly reports clear or blocked pending todos.
-8. Type/package validation if available: \`npm run build\`.
-9. Existing schema validators if available: \`.cerebro/scripts/validate-boulder.py\`, \`.cerebro/scripts/validate-team-runs.py\`.
-
-Summarize exact failures and suggested fixes.` },
   { path: ".opencode/commands/cerebro-index.md", content: `---
 description: Build or refresh .cerebro/project-context.md with OpenCode Cerebro agents.
 agent: cerebro

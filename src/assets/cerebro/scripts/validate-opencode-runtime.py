@@ -24,7 +24,6 @@ REQUIRED_COMMANDS = {
     "cerebro-index",
     "cerebro-plan",
     "cerebro-start-work",
-    "cerebro-doctor",
     "to-me-my-x-men",
 }
 MODEL_PATTERN = re.compile(r"(?:openai|anthropic|minimax)/[A-Za-z0-9._/-]+")
