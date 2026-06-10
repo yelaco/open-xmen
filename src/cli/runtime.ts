@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { runtimeAssetMap, runtimeAssetsByPrefix } from "../runtime/index.js";
+import { runtimeAssets, runtimeAssetsByPrefix } from "../runtime/index.js";
 
 export type ManagedWriteOptions = {
   dryRun: boolean;
@@ -10,7 +10,6 @@ export type ManagedWriteOptions = {
 
 const OPEN_XMEN_AGENT_BLOCK_START = "<!-- OPEN-XMEN:START -->";
 const OPEN_XMEN_AGENT_BLOCK_END = "<!-- OPEN-XMEN:END -->";
-const RUNTIME_ASSET_MAP = runtimeAssetMap();
 
 export function installManagedRuntime(target: string, opts: ManagedWriteOptions) {
   for (const asset of runtimeAssetsByPrefix(".opencode/").concat(runtimeAssetsByPrefix(".cerebro/"))) {
@@ -90,9 +89,9 @@ function appendGitignoreEntry(target: string, entry: string, opts: ManagedWriteO
 }
 
 function requiredRuntimeAsset(assetPath: string) {
-  const content = RUNTIME_ASSET_MAP.get(assetPath);
-  if (typeof content !== "string") throw new Error(`Missing generated runtime asset: ${assetPath}`);
-  return content;
+  const asset = runtimeAssets.find((a) => a.path === assetPath);
+  if (typeof asset?.content !== "string") throw new Error(`Missing generated runtime asset: ${assetPath}`);
+  return asset.content;
 }
 
 function writeManagedFile(destination: string, content: string, opts: ManagedWriteOptions) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { DEFAULT_MODEL_SLOTS } from "./runtime/index.js";
+import { modelSlots } from "./config/models.js";
 import { installManagedAgentInstructions, installManagedRuntime } from "./cli/runtime.js";
 import { updateOpencodeConfig, warmOpenCodePluginCache } from "./cli/config.js";
 import { runOpenCodeDoctor } from "./cli/doctor.js";
@@ -95,9 +95,8 @@ function install(args: string[]) {
     return 0;
   }
 
-  const unknown = args.find((arg, index) => {
+  const unknown = args.find((arg) => {
     if (!arg.startsWith("-")) return false;
-    if (args[index - 1] === "--dir") return false;
     return !["--dir", "--dry-run", "--force", "--reset", "--no-deps"].includes(arg);
   });
   if (unknown) {
@@ -155,9 +154,8 @@ function update(args: string[]) {
     return 0;
   }
 
-  const unknown = args.find((arg, index) => {
+  const unknown = args.find((arg) => {
     if (!arg.startsWith("-")) return false;
-    if (args[index - 1] === "--dir") return false;
     return !["--dir", "--dry-run"].includes(arg);
   });
   if (unknown) {
@@ -201,9 +199,8 @@ function doctor(args: string[] = []) {
   }
   const json = args.includes("--json");
   const targetArg = valueAfter(args, "--dir");
-  const unknown = args.find((arg, index) => {
+  const unknown = args.find((arg) => {
     if (!arg.startsWith("-")) return false;
-    if (args[index - 1] === "--dir") return false;
     return !["--dir", "--json"].includes(arg);
   });
   if (unknown) {
@@ -238,14 +235,7 @@ function doctor(args: string[] = []) {
 }
 
 function models() {
-  console.log(JSON.stringify({
-    frontier: process.env.CEREBRO_MODEL_FRONTIER || DEFAULT_MODEL_SLOTS.frontier,
-    strong: process.env.CEREBRO_MODEL_STRONG || DEFAULT_MODEL_SLOTS.strong,
-    coding: process.env.CEREBRO_MODEL_CODING || DEFAULT_MODEL_SLOTS.coding,
-    spark: process.env.CEREBRO_MODEL_SPARK || DEFAULT_MODEL_SLOTS.spark,
-    fast: process.env.CEREBRO_MODEL_FAST || DEFAULT_MODEL_SLOTS.fast,
-    image: process.env.CEREBRO_MODEL_IMAGE || DEFAULT_MODEL_SLOTS.image,
-  }, null, 2));
+  console.log(JSON.stringify(modelSlots(), null, 2));
   return 0;
 }
 

@@ -5,7 +5,8 @@ import { appendFile, lstat, mkdir, readFile, readdir, rm, writeFile } from "node
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES, DEFAULT_MODEL_SLOTS } from "./runtime/index.js";
+import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
+import { modelSlots } from "./config/models.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
 const RISKS = [...CEREBRO_RISKS] as const;
@@ -55,7 +56,7 @@ type ChildSessionClient = {
 };
 
 function now() {
-  return new Date().toISOString().replace("+00:00", "Z");
+  return new Date().toISOString();
 }
 
 function slug(input: string) {
@@ -81,8 +82,12 @@ function safeRuntimePath(ctx: RuntimeContext, relativePath: string) {
 }
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
-  if (!existsSync(file)) return fallback;
-  return JSON.parse(await readFile(file, "utf8")) as T;
+  try {
+    return JSON.parse(await readFile(file, "utf8")) as T;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return fallback;
+    throw err;
+  }
 }
 
 async function writeJson(file: string, data: unknown) {
@@ -93,17 +98,6 @@ async function writeJson(file: string, data: unknown) {
 async function appendJsonl(file: string, data: unknown) {
   await mkdir(path.dirname(file), { recursive: true });
   await appendFile(file, `${JSON.stringify(data)}\n`, "utf8");
-}
-
-function modelSlots() {
-  return {
-    frontier: process.env.CEREBRO_MODEL_FRONTIER || DEFAULT_MODEL_SLOTS.frontier,
-    strong: process.env.CEREBRO_MODEL_STRONG || DEFAULT_MODEL_SLOTS.strong,
-    coding: process.env.CEREBRO_MODEL_CODING || DEFAULT_MODEL_SLOTS.coding,
-    spark: process.env.CEREBRO_MODEL_SPARK || DEFAULT_MODEL_SLOTS.spark,
-    fast: process.env.CEREBRO_MODEL_FAST || DEFAULT_MODEL_SLOTS.fast,
-    image: process.env.CEREBRO_MODEL_IMAGE || DEFAULT_MODEL_SLOTS.image,
-  };
 }
 
 function parseModelID(model: string) {
@@ -199,6 +193,15 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
   const ctx = { worktree, directory };
   let sessionCheckDone = false;
 
+  // Serialises load→mutate→save cycles per run_id to prevent concurrent writes clobbering each other.
+  const taskLocks = new Map<string, Promise<unknown>>();
+  function serializeTask<T>(runId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = taskLocks.get(runId) ?? Promise.resolve();
+    const next: Promise<T> = prev.then(fn, () => fn());
+    taskLocks.set(runId, next.then(() => {}, () => {}));
+    return next;
+  }
+
   return {
     async "permission.ask"(input: Permission, output) {
       const pattern = Array.isArray(input.pattern) ? input.pattern[0] : (input.pattern ?? "");
@@ -206,8 +209,13 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
         output.status = "deny";
         return;
       }
-      if (pattern && (pattern.startsWith(".cerebro/") || pattern.includes("/.cerebro/"))) {
-        output.status = "allow";
+      if (pattern) {
+        const projectRoot = ctx.worktree || ctx.directory;
+        const cerebroRoot = path.resolve(projectRoot, ".cerebro");
+        const resolved = path.resolve(projectRoot, pattern);
+        if (isInside(cerebroRoot, resolved)) {
+          output.status = "allow";
+        }
       }
     },
 
@@ -268,8 +276,9 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
       } satisfies Part);
     },
 
-    async "tool.execute.before"(_input, output) {
-      const args = readToolArgs(output.args);
+    async "tool.execute.before"(input, output) {
+      const rawInput = input as { args?: unknown };
+      const args = readToolArgs(rawInput.args ?? output.args);
       const filePath = String(args.filePath || args.path || "");
       if (filePath && isSecretPath(filePath)) {
         throw new Error("Cerebro safety policy blocks reading or touching env/secret/credential paths without explicit user authorization.");
@@ -353,7 +362,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
           owner: tool.schema.string().min(1).describe("Cerebro role or spawned agent name"),
           depends_on: tool.schema.array(tool.schema.string()).optional(),
         },
-        async execute(args) {
+        execute: (args) => serializeTask(args.run_id, async () => {
           const tasks = await loadTasks(ctx, args.run_id);
           const id = `task-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
           const record: TaskRecord = {
@@ -371,7 +380,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
           tasks.push(record);
           await saveTasks(ctx, args.run_id, tasks);
           return JSON.stringify(record, null, 2);
-        },
+        }),
       }),
 
       cerebro_task_list: tool({
@@ -392,7 +401,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
           verification_result: tool.schema.enum(["PASS", "FAIL", "BLOCKED", "NOT RUN"]).optional(),
           verification_command: tool.schema.string().optional(),
         },
-        async execute(args) {
+        execute: (args) => serializeTask(args.run_id, async () => {
           const tasks = await loadTasks(ctx, args.run_id);
           const taskRecord = tasks.find((task) => task.id === args.task_id);
           if (!taskRecord) throw new Error(`Unknown task ${args.task_id}`);
@@ -409,7 +418,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
           taskRecord.updated_at = now();
           await saveTasks(ctx, args.run_id, tasks);
           return JSON.stringify(taskRecord, null, 2);
-        },
+        }),
       }),
 
       cerebro_mailbox_send: tool({
@@ -517,19 +526,29 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
         },
         async execute(args) {
           const pendingRoot = safeRuntimePath(ctx, "pending-todos");
+          const legacyPendingRoot = safeRuntimePath(ctx, ".pending-todos");
           const teamName = args.team_name?.trim();
           if (teamName) assertSafeName(teamName, "team_name");
-          const items = await scanPendingTodos(pendingRoot, teamName);
-          if (items.length === 0) return JSON.stringify({ cleared: 0, message: "No pending todos to clear." });
+          const [items, legacyItems] = await Promise.all([
+            scanPendingTodos(pendingRoot, teamName),
+            scanPendingTodos(legacyPendingRoot, teamName),
+          ]);
+          const total = items.length + legacyItems.length;
+          if (total === 0) return JSON.stringify({ cleared: 0, message: "No pending todos to clear." });
           if (teamName) {
             const teamDir = path.join(pendingRoot, teamName);
             if (existsSync(teamDir)) await rm(teamDir, { recursive: true, force: true });
+            const legacyTeamDir = path.join(legacyPendingRoot, teamName);
+            if (existsSync(legacyTeamDir)) await rm(legacyTeamDir, { recursive: true, force: true });
           } else {
-            for (const entry of await readdir(pendingRoot)) {
-              await rm(path.join(pendingRoot, entry), { recursive: true, force: true });
+            if (existsSync(pendingRoot)) {
+              for (const entry of await readdir(pendingRoot)) {
+                await rm(path.join(pendingRoot, entry), { recursive: true, force: true });
+              }
             }
+            if (existsSync(legacyPendingRoot)) await rm(legacyPendingRoot, { recursive: true, force: true });
           }
-          return JSON.stringify({ cleared: items.length, message: `Cleared ${items.length} pending todo item(s). Starting fresh.` });
+          return JSON.stringify({ cleared: total, message: `Cleared ${total} pending todo item(s). Starting fresh.` });
         },
       }),
 

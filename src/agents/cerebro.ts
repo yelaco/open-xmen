@@ -1,4 +1,5 @@
-import { type AgentDefinition, resolvePrompt, CEREBRO_RUNTIME_CONTRACT } from "./types.js";
+import { type AgentDefinition, CEREBRO_RUNTIME_CONTRACT } from "./types.js";
+import { makeAgent } from "./team.js";
 
 const AGENT_DESCRIPTIONS: Record<string, string> = {
   legion: `@legion
@@ -147,33 +148,15 @@ export function createCerebroAgent(
   disabledAgents?: Set<string>,
 ): AgentDefinition {
   const basePrompt = buildCerebroPrompt(disabledAgents);
-  const prompt = resolvePrompt(basePrompt, customPrompt, customAppendPrompt);
-
-  const definition: AgentDefinition = {
-    name: "cerebro",
-    displayName: "Cerebro",
-    description: "Cerebro team lead for preserved commands and OpenCode-native orchestration.",
-    config: {
-      temperature: 0.2,
-      prompt,
-    },
-    opencode: {
-      mode: "primary",
-      steps: 60,
-      variant: "medium",
-      permission: { edit: "ask", bash: "ask", webfetch: "ask" },
-    },
-  };
-
-  const resolvedModel = model ?? ["openai/gpt-5.5", "anthropic/claude-sonnet-4-6"];
-  if (Array.isArray(resolvedModel)) {
-    definition._modelArray = resolvedModel.map((m) => (typeof m === "string" ? { id: m } : m));
-    if (definition._modelArray.length > 0) {
-      definition.config.model = definition._modelArray[0].id;
-    }
-  } else if (typeof resolvedModel === "string" && resolvedModel) {
-    definition.config.model = resolvedModel;
-  }
-
-  return definition;
+  return makeAgent(
+    "cerebro",
+    "Cerebro",
+    "Cerebro team lead for preserved commands and OpenCode-native orchestration.",
+    basePrompt,
+    "openai/gpt-5.5",
+    { mode: "primary", steps: 60, variant: "medium", permission: { edit: "ask", bash: "ask", webfetch: "ask" } },
+    model ?? ["openai/gpt-5.5", "anthropic/claude-sonnet-4-6"],
+    customPrompt,
+    customAppendPrompt,
+  );
 }

@@ -25,7 +25,7 @@ const DEFAULT_OPENCODE_META: OpenCodeMeta = {
   permission: { edit: "ask", bash: "ask", webfetch: "ask" },
 };
 
-function makeAgent(
+export function makeAgent(
   name: string,
   displayName: string,
   description: string,
