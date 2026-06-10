@@ -123,7 +123,8 @@ open-xmen models
 - `--dry-run` prints planned writes and does not mutate the target config or project.
 - `--global` installs into the OpenCode user config; it is the default when `--dir` is omitted and `--with-runtime-files` is not set. The user config path honors `OPENCODE_CONFIG_DIR` first, then `XDG_CONFIG_HOME`, then `~/.config/opencode`.
 - `--dir` writes a project-local `opencode.jsonc` and makes `cerebro` the default agent for that project.
-- `--with-runtime-files` writes the legacy managed runtime files; without it, no `.opencode/` or `.cerebro/` files are created.
+- Re-run `bunx open-xmen@latest install` to refresh the OpenCode config entry and force-refresh the stale OpenCode package cache.
+- `--with-runtime-files` writes the legacy managed runtime files; without it, install creates no `.opencode/`, `.cerebro/`, or `AGENTS.md` files.
 - `--reset` / `--force` refresh existing managed files when `--with-runtime-files` is used.
 - `opencode.jsonc` writes are atomic via `opencode.jsonc.tmp` and create `opencode.jsonc.bak` before replacing an existing config.
 - `doctor --json` returns script-friendly diagnostics.
@@ -188,9 +189,9 @@ python3 .cerebro/scripts/validate-team-runs.py
 npm run verify:release
 ```
 
-`npm run verify:release` builds the package, packs it with `npm pack --json --ignore-scripts`, checks the packaged runtime file set exactly, rejects forbidden paths such as dev-only plugin bridges or secret-like files, installs the tarball into a clean temp package, smoke-tests user-config install, project plugin-only install, runtime-file install, command/agent resolution through `opencode debug config`, plugin command/agent registration, and `open-xmen doctor`.
+`npm run verify:release` builds the package, packs it with `npm pack --json --ignore-scripts`, checks the packaged runtime file set exactly, rejects forbidden paths such as dev-only plugin bridges or secret-like files, installs the tarball into a clean temp package, smoke-tests user-config install, project plugin-only install, runtime-file install, command/agent resolution through `opencode debug config`, plugin command/agent registration, cache-refreshing `open-xmen install`, and `open-xmen doctor`.
 
-Use `bunx open-xmen@latest doctor [--dir <path>]` for install/runtime diagnostics outside OpenCode.
+Use `bunx open-xmen@latest install` for safe package/config refreshes outside OpenCode, and `bunx open-xmen@latest doctor [--dir <path>]` for diagnostics.
 
 ## Auto-Upgrades
 
