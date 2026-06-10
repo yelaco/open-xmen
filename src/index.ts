@@ -765,7 +765,6 @@ export const CerebroPlugin: Plugin = async (input) => {
         async execute(args, toolContext) {
           const POLL_INTERVAL_MS = 2000;
           const MAX_POLL_MS = 30 * 60 * 1000;
-          const STABILITY_REQUIRED = 3;
 
           try {
             if (!hasChildSessionClient(client) || typeof client.session.messages !== "function") {
@@ -776,8 +775,6 @@ export const CerebroPlugin: Plugin = async (input) => {
 
             if (args.poll) {
               const startTime = Date.now();
-              let stablePolls = 0;
-              let lastMsgCount = 0;
 
               while (true) {
                 if ((toolContext as unknown as { abort?: { aborted: boolean } }).abort?.aborted) {
@@ -789,20 +786,12 @@ export const CerebroPlugin: Plugin = async (input) => {
                   query: { directory: toolContext.directory, limit: 100 },
                 });
 
-                const messages = Array.isArray(resultData(response)) ? (resultData(response) as unknown[]) : [];
-                const currentCount = messages.length;
                 const currentOutput = assistantTextFromMessages(response);
                 const hasTerminal = Boolean(
                   currentOutput && (currentOutput.includes("EXECUTION_COMPLETE") || currentOutput.includes("EXECUTION_BLOCKED"))
                 );
 
-                if (currentCount > 0 && currentCount === lastMsgCount) {
-                  stablePolls++;
-                  if (stablePolls >= STABILITY_REQUIRED || hasTerminal) break;
-                } else {
-                  stablePolls = 0;
-                  lastMsgCount = currentCount;
-                }
+                if (hasTerminal) break;
 
                 if (Date.now() - startTime >= MAX_POLL_MS) {
                   return JSON.stringify({
