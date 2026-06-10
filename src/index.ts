@@ -342,7 +342,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_task_create: tool({
-        description: "Create a task record for a Cerebro run. Include category and verification_commands when creating records from a plan so Cyclops can route, batch, and verify deterministically.",
+        description: "Create a task record for a Cerebro run. Include category, files, depends_on, and verification_commands when creating records from a plan so the workflow engine can route, batch, and verify deterministically.",
         args: {
           run_id: tool.schema.string().min(1),
           subject: tool.schema.string().min(1),
@@ -351,6 +351,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           category: tool.schema.enum(["visual-engineering", "architecture", "explore", "research", "deep", "quick"]).optional(),
           verification_commands: tool.schema.array(tool.schema.string().min(1)).optional(),
           depends_on: tool.schema.array(tool.schema.string()).optional(),
+          files: tool.schema.array(tool.schema.string().min(1)).optional().describe("Repo-relative file paths this task is expected to touch; the workflow engine uses them to avoid scheduling conflicting tasks in the same parallel batch"),
         },
         execute: (args, toolContext) => mutex.serialize(args.run_id, async () => {
           const tasks = await loadTasks(ctx, args.run_id);
@@ -362,6 +363,7 @@ export const CerebroPlugin: Plugin = async (input) => {
             owner: args.owner,
             ...(args.category ? { category: args.category } : {}),
             ...(args.verification_commands?.length ? { verification_commands: args.verification_commands } : {}),
+            ...(args.files?.length ? { files: args.files } : {}),
             status: "pending",
             depends_on: args.depends_on || [],
             created_at: now(),

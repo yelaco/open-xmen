@@ -1,7 +1,7 @@
 import { type AgentDefinition, type OpenCodeMeta, resolvePrompt, CEREBRO_RUNTIME_CONTRACT } from "./types.js";
 import { AGENT_MODEL_SLOTS, defaultModelChainForAgent } from "../config/models.js";
 
-const TASK_RESULT_CONTRACT = `## Output Contract
+export const TASK_RESULT_CONTRACT = `## Output Contract
 
 Return exactly one final result block:
 
@@ -18,6 +18,8 @@ VERIFICATION:
 - [evidence]
 ISSUES:
 - [remaining issue or NONE]
+GOTCHAS:
+- [pattern, convention, or surprise discovered — omit the section if none]
 \`\`\``;
 
 const DEFAULT_OPENCODE_META: OpenCodeMeta = {

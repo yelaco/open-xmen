@@ -20,6 +20,8 @@ Use explicit gates for destructive, irreversible, privileged, external mutating,
 
 ## Tasks
 
+Each task's `Category`, `Depends On`, `Files`, and `Verify` fields become machine-scheduled task records consumed by the Cerebro workflow engine. Keep them precise, not decorative: `Files` drives parallel-batch conflict avoidance and `Verify` commands are executed verbatim in a shell.
+
 ### Task 1: [Name]
 
 **Owner:** Wolverine | Jean Grey | Storm | Forge consultation
