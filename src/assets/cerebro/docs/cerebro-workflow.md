@@ -26,7 +26,8 @@ flowchart TB
         Route --> NC["explore: Nightcrawler"]
         Route --> SG["research: Sage"]
         Route --> WV["deep/quick/default:\nWolverine"]
-        WJ & FG & NC & SG & WV --> Verify["Cyclops Verification\n(run commands, check evidence)"]
+        WJ & FG & NC & SG & WV --> Collect["Collect TASK_RESULT\n(mailbox + task ledger)"]
+        Collect --> Verify["Cyclops Verification\n(run commands, check evidence)"]
         Verify -->|"FAIL (≤2 retries)"| Route
     end
 
@@ -65,7 +66,7 @@ flowchart TB
 | `.cerebro/boulder.json` | Cerebro | Business-level execution checkpoint: active plan, overall status, approvals, verification history, and decisions. Task progress lives in `.cerebro/team-runs/{run-id}.tasks.json`. |
 | `.cerebro/team-runs/{run-id}.json` | Cerebro | Run manifest for command, team name, teammates, approvals, mailbox decisions, verification, and cleanup. |
 | `.cerebro/team-runs/{run-id}.tasks.json` | Cerebro | OpenCode-managed task ledger updated by `cerebro_task_create/list/update`. |
-| `.cerebro/team-runs/{run-id}.mailbox.jsonl` | Cerebro team | Mailbox log written by `cerebro_mailbox_send` and read by `cerebro_mailbox_read`. |
+| `.cerebro/team-runs/{run-id}.mailbox.jsonl` | Cerebro team | Mailbox log written by `cerebro_mailbox_send`, `cerebro_agent_task`, `cerebro_dispatch_agent`, and `cerebro_collect_result`; read by `cerebro_mailbox_read`. |
 | `.cerebro/team-runs/{run-id}.checkpoints.jsonl` | Cerebro team | Durable checkpoints written by `cerebro_checkpoint`. |
 | `.cerebro/notepads/{plan}/conventions.md` | Cerebro | Coding patterns, naming, file structure, UI patterns. |
 | `.cerebro/notepads/{plan}/commands.md` | Cerebro | Useful install/test/lint/build/dev commands. |

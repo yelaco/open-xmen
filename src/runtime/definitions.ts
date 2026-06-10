@@ -18,5 +18,16 @@ export {
   createEmmaFrostAgent,
 } from "../agents/index.js";
 export { CEREBRO_COMMANDS } from "../commands/index.js";
-export { DEFAULT_MODEL_SLOTS } from "../config/models.js";
+export {
+  AGENT_MODEL_SLOTS,
+  CEREBRO_MODEL_SLOT_KEYS,
+  DEFAULT_AGENT_FALLBACKS,
+  DEFAULT_MODEL_SLOTS,
+  MODEL_SLOT_ENV,
+  defaultModelChainForAgent,
+  defaultModelForAgent,
+  isCerebroModelSlot,
+  modelSlots,
+} from "../config/models.js";
+export type { CerebroModelSlot } from "../config/models.js";
 export { CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "../council/index.js";

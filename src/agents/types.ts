@@ -4,6 +4,7 @@ export const CEREBRO_RUNTIME_CONTRACT = `## Cerebro Runtime Contract
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.`;
@@ -20,6 +21,12 @@ export interface OpenCodeMeta {
     edit?: OpenCodePermissionLevel;
     bash?: OpenCodePermissionLevel;
     webfetch?: OpenCodePermissionLevel;
+    task?: OpenCodePermissionLevel;
+    question?: OpenCodePermissionLevel;
+    external_directory?: OpenCodePermissionLevel;
+    websearch?: OpenCodePermissionLevel;
+    todowrite?: OpenCodePermissionLevel;
+    skill?: OpenCodePermissionLevel;
   };
 }
 

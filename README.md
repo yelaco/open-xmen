@@ -33,30 +33,33 @@ The legacy `.claude/` files are still present as migration source/compatibility 
 
 ## Model Routing
 
-This installation is configured for the user's cost-conscious OpenAI model set. GPT-5.4 is the default; GPT-5.4 Pro can be opted into via `CEREBRO_MODEL_FRONTIER` when the premium lane is worth the cost:
+Open X-Men uses canonical role-based model slots. Agent frontmatter, `cerebro_model_slots`, command defaults, and `.cerebro/opencode/model-routing.md` are expected to agree.
 
-| Slot | Model | Roles |
+| Slot | Default model | Roles |
 |---|---|---|
-| `frontier` | `openai/gpt-5.4` | Cerebro, Professor X, Cyclops, Forge, Emma Frost |
-| `strong` | `openai/gpt-5.4` | Legion, Cypher, Sage, Beast |
-| `legacy-frontier` | `openai/gpt-5.2` | Optional fallback/compatibility lane |
-| `coding` | `openai/gpt-5.3-codex` | Wolverine, Storm |
-| `spark` | `openai/gpt-5.3-codex-spark` | Instant code sketches, boilerplate, test stubs, tiny low-risk diffs |
-| `fast` | `openai/gpt-5.4-mini` | Nightcrawler fast search/indexing |
+| `orchestrator` | `openai/gpt-5.5` | Cerebro |
+| `conductor` | `openai/gpt-5.5` | Cyclops |
+| `planner` | `openai/gpt-5.5` | Professor X, Beast, Forge, Emma Frost |
+| `design` | `openai/gpt-5.5` | Jean Grey |
+| `analyst` | `openai/gpt-5.4` | Legion, Cypher |
+| `workers` | `openai/gpt-5.5` | Wolverine, Storm |
+| `fast` | `openai/gpt-5.4-mini-fast` | Nightcrawler, Sage |
 | `image` | `openai/gpt-image-2` | image/design asset generation only |
 
 Override with environment variables if your available models change:
 
 ```bash
-export CEREBRO_MODEL_FRONTIER="openai/gpt-5.4"
-export CEREBRO_MODEL_STRONG="openai/gpt-5.4"
-export CEREBRO_MODEL_CODING="openai/gpt-5.3-codex"
-export CEREBRO_MODEL_SPARK="openai/gpt-5.3-codex-spark"
-# optional premium lane: export CEREBRO_MODEL_FRONTIER="openai/gpt-5.4-pro"
-# optional legacy fallback: export CEREBRO_MODEL_FRONTIER="openai/gpt-5.2"
-export CEREBRO_MODEL_FAST="openai/gpt-5.4-mini"
+export CEREBRO_MODEL_ORCHESTRATOR="openai/gpt-5.5"
+export CEREBRO_MODEL_CONDUCTOR="openai/gpt-5.5"
+export CEREBRO_MODEL_PLANNER="openai/gpt-5.5"
+export CEREBRO_MODEL_DESIGN="openai/gpt-5.5"
+export CEREBRO_MODEL_ANALYST="openai/gpt-5.4"
+export CEREBRO_MODEL_WORKERS="openai/gpt-5.5"
+export CEREBRO_MODEL_FAST="openai/gpt-5.4-mini-fast"
 export CEREBRO_MODEL_IMAGE="openai/gpt-image-2"
 ```
+
+Legacy `CEREBRO_MODEL_FRONTIER`, `CEREBRO_MODEL_STRONG`, and `CEREBRO_MODEL_CODING` are accepted as migration fallbacks, but new setups should use role slots.
 
 ---
 
@@ -128,8 +131,7 @@ open-xmen models
 | `/cerebro-plan [task]` | Interview-first planning with Professor X, Beast, and Emma Frost validation. |
 | `/cerebro-start-work` | Execute or resume the latest Cerebro plan through Cyclops coordination. |
 | `/to-me-my-x-men [task]` | Autonomous full-team mode with Legion + Cypher intent consult and final Legion acceptance. |
-| `/cerebro-doctor` | Validate runtime health. |
-| `/cerebro-reset` | Reset runtime state after confirmation. |
+| `/cerebro-doctor` | Validate runtime health and command/model/runtime drift. |
 
 ---
 
@@ -137,18 +139,18 @@ open-xmen models
 
 | Agent | Role | Default model |
 |---|---|---|
-| Cerebro | Main OpenCode primary agent / team lead | `openai/gpt-5.4` |
+| Cerebro | Main OpenCode primary agent / team lead | `openai/gpt-5.5` |
 | Legion | Customer / product-owner proxy | `openai/gpt-5.4` |
 | Cypher | Requirements analyst | `openai/gpt-5.4` |
-| Professor X | Strategic planner | `openai/gpt-5.4` |
-| Cyclops | Execution sequencer and verifier | `openai/gpt-5.4` |
-| Wolverine | Code/test implementation | `openai/gpt-5.3-codex` |
-| Storm | UI/visual implementation | `openai/gpt-5.3-codex` |
-| Forge | Architecture consultant | `openai/gpt-5.4` |
-| Nightcrawler | Read-only codebase search | `openai/gpt-5.4-mini` |
-| Sage | Docs/API research | `openai/gpt-5.4` |
-| Beast | Gap analysis and critique | `openai/gpt-5.4` |
-| Emma Frost | Strict validation | `openai/gpt-5.4` |
+| Professor X | Strategic planner | `openai/gpt-5.5` |
+| Cyclops | Execution sequencer and verifier | `openai/gpt-5.5` |
+| Wolverine | Code/test implementation | `openai/gpt-5.5` |
+| Storm | UI/visual implementation | `openai/gpt-5.5` |
+| Forge | Architecture consultant | `openai/gpt-5.5` |
+| Nightcrawler | Read-only codebase search | `openai/gpt-5.4-mini-fast` |
+| Sage | Docs/API research | `openai/gpt-5.4-mini-fast` |
+| Beast | Gap analysis and critique | `openai/gpt-5.5` |
+| Emma Frost | Strict validation | `openai/gpt-5.5` |
 
 ---
 
@@ -184,14 +186,10 @@ npm run verify:release
 
 `npm run verify:release` builds the package, packs it with `npm pack --json --ignore-scripts`, checks the packaged runtime file set exactly, rejects forbidden paths such as dev-only plugin bridges or secret-like files, installs the tarball into a clean temp package, runs `open-xmen install --no-deps`, verifies `plugin: ["open-xmen"]`, and runs `open-xmen doctor`.
 
-`/cerebro-doctor` runs the same class of checks from inside OpenCode.
+`/cerebro-doctor` runs the same class of checks from inside OpenCode, including model-slot consistency and runtime drift.
 
 ## Auto-Upgrades
 
 When the `open-xmen` plugin loads, it checks the npm registry for the latest package version. If a newer package is available and the plugin is running from a package-managed `node_modules/open-xmen` install, it best-effort updates that package and re-runs `open-xmen install --reset --no-deps` for the current project. Results are written to `.cerebro/auto-upgrade.json`; registry or install failures never block OpenCode startup.
 
 Set `OPEN_XMEN_SKIP_AUTO_UPGRADE=1` or `OPEN_XMEN_AUTO_UPGRADE=0` to disable this behavior.
-
-## Spark Lane
-
-`gpt-5.3-codex-spark` is available as a fast draft lane. Cerebro should use it for instant code generation, boilerplate, test stubs, tiny low-risk diffs, and candidate patches. Full `gpt-5.3-codex` remains the default for Wolverine/Storm final implementation and verification.

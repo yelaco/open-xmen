@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
-import { modelSlots } from "./config/models.js";
+import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, modelSlots } from "./config/models.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
 const RISKS = [...CEREBRO_RISKS] as const;
@@ -51,6 +51,20 @@ type ChildSessionClient = {
         noReply: boolean;
         parts: Array<{ type: "text"; text: string }>;
       };
+    }): Promise<unknown>;
+    prompt?(input: {
+      path: { id: string };
+      query?: { directory: string };
+      body: {
+        agent: string;
+        model?: { providerID: string; modelID: string };
+        noReply?: boolean;
+        parts: Array<{ type: "text"; text: string }>;
+      };
+    }): Promise<unknown>;
+    messages?(input: {
+      path: { id: string };
+      query?: { directory: string; limit?: number };
     }): Promise<unknown>;
   };
 };
@@ -173,6 +187,48 @@ function childSessionID(result: unknown) {
   return typeof result.id === "string" ? result.id : undefined;
 }
 
+function resultData(value: unknown) {
+  if (isRecord(value) && "data" in value) return value.data;
+  return value;
+}
+
+function assistantTextFromMessages(result: unknown) {
+  const data = resultData(result);
+  const messages = Array.isArray(data) ? data : [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const entry = messages[i];
+    if (!isRecord(entry)) continue;
+    const info = entry.info;
+    if (!isRecord(info) || info.role !== "assistant") continue;
+    const parts = Array.isArray(entry.parts) ? entry.parts : [];
+    const text = parts
+      .filter((part) => isRecord(part) && part.type === "text" && typeof part.text === "string")
+      .map((part) => String((part as { text: string }).text))
+      .join("\n")
+      .trim();
+    if (text) return text;
+    if (isRecord(info.structured) && typeof info.structured.text === "string") return info.structured.text;
+  }
+  return "";
+}
+
+function taskStatusFromTaskResult(text: string): TaskStatus | undefined {
+  const match = text.match(/STATUS:\s*(completed|blocked|failed)/i);
+  if (!match) return undefined;
+  return match[1].toLowerCase() === "completed" ? "done" : (match[1].toLowerCase() as "blocked" | "failed");
+}
+
+function summarizeTaskResult(text: string) {
+  const status = taskStatusFromTaskResult(text);
+  const summaryMatch = text.match(/SUMMARY:\s*(.+)/i);
+  const files = [...text.matchAll(/^\s*-\s*(.+\.[A-Za-z0-9]+)\s*$/gmi)].map((match) => match[1]).slice(0, 20);
+  return {
+    status,
+    summary: summaryMatch?.[1]?.trim() ?? "",
+    files,
+  };
+}
+
 function taskFile(ctx: RuntimeContext, runId: string) {
   return safeRuntimePath(ctx, `team-runs/${runId}.tasks.json`);
 }
@@ -202,6 +258,33 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
     return next;
   }
 
+  async function recordAgentResult(runId: string, agent: string, childSessionId: string, output: string, taskId?: string) {
+    const summary = summarizeTaskResult(output);
+    await appendJsonl(safeRuntimePath(ctx, `team-runs/${runId}.mailbox.jsonl`), {
+      at: now(),
+      type: "agent_result",
+      from: agent,
+      to: "cerebro",
+      child_session_id: childSessionId,
+      task_id: taskId,
+      status: summary.status ?? "unknown",
+      summary: summary.summary,
+      body: output,
+    });
+
+    if (!taskId) return summary;
+    await serializeTask(runId, async () => {
+      const tasks = await loadTasks(ctx, runId);
+      const taskRecord = tasks.find((task) => task.id === taskId);
+      if (!taskRecord) throw new Error(`Unknown task ${taskId}`);
+      if (summary.status) taskRecord.status = summary.status;
+      taskRecord.notes.push(`${now()} ${agent} returned ${summary.status ?? "unparsed"} from child session ${childSessionId}${summary.summary ? `: ${summary.summary}` : ""}`);
+      taskRecord.updated_at = now();
+      await saveTasks(ctx, runId, tasks);
+    });
+    return summary;
+  }
+
   return {
     async "permission.ask"(input: Permission, output) {
       const pattern = Array.isArray(input.pattern) ? input.pattern[0] : (input.pattern ?? "");
@@ -221,12 +304,7 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
 
     async "shell.env"(_input, output) {
       const slots = modelSlots();
-      output.env.CEREBRO_MODEL_FRONTIER = slots.frontier;
-      output.env.CEREBRO_MODEL_STRONG = slots.strong;
-      output.env.CEREBRO_MODEL_CODING = slots.coding;
-      output.env.CEREBRO_MODEL_SPARK = slots.spark;
-      output.env.CEREBRO_MODEL_FAST = slots.fast;
-      output.env.CEREBRO_MODEL_IMAGE = slots.image;
+      for (const slot of CEREBRO_MODEL_SLOT_KEYS) output.env[MODEL_SLOT_ENV[slot]] = slots[slot];
     },
 
     async "experimental.chat.system.transform"(_input, output) {
@@ -459,13 +537,13 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
       }),
 
       cerebro_dispatch_agent: tool({
-        description: "Dispatch an OpenCode child session for a Cerebro agent and record the dispatch in the mailbox. Returns child session metadata when the SDK supports it, otherwise returns a fallback instruction.",
+        description: "Dispatch an asynchronous OpenCode child session for a Cerebro agent and record the dispatch in the mailbox. Use cerebro_collect_result or cerebro_agent_task when a TASK_RESULT is required.",
         args: {
           run_id: tool.schema.string().min(1),
           agent: tool.schema.enum(CEREBRO_AGENTS).describe("Cerebro agent name, e.g. wolverine, nightcrawler, professor-x"),
           description: tool.schema.string().min(1),
           prompt: tool.schema.string().min(1),
-          model_slot: tool.schema.enum(["frontier", "strong", "coding", "spark", "fast", "image"]).optional().describe("Cerebro model slot override for this dispatch"),
+          model_slot: tool.schema.enum(CEREBRO_MODEL_SLOT_KEYS).optional().describe("Cerebro role model slot override for this dispatch"),
           no_reply: tool.schema.boolean().optional(),
         },
         async execute(args, toolContext) {
@@ -498,6 +576,113 @@ export const CerebroPlugin: Plugin = async ({ worktree, directory, client }) => 
               dispatched: false,
               agent: args.agent,
               fallback: `Use @${args.agent} with the prompt supplied to cerebro_dispatch_agent.`,
+              error: error instanceof Error ? error.message : String(error),
+            }, null, 2);
+          }
+        },
+      }),
+
+      cerebro_agent_task: tool({
+        description: "Run a Cerebro agent in a child session, wait for its reply, record the result, and optionally update a task ledger entry.",
+        args: {
+          run_id: tool.schema.string().min(1),
+          task_id: tool.schema.string().optional(),
+          agent: tool.schema.enum(CEREBRO_AGENTS).describe("Cerebro agent name, e.g. wolverine, nightcrawler, professor-x"),
+          description: tool.schema.string().min(1),
+          prompt: tool.schema.string().min(1),
+          model_slot: tool.schema.enum(CEREBRO_MODEL_SLOT_KEYS).optional().describe("Cerebro role model slot override for this task"),
+        },
+        async execute(args, toolContext) {
+          await appendJsonl(safeRuntimePath(ctx, `team-runs/${args.run_id}.mailbox.jsonl`), {
+            at: now(),
+            type: "dispatch_sync",
+            from: "cerebro",
+            to: args.agent,
+            task_id: args.task_id,
+            description: args.description,
+          });
+          try {
+            if (!hasChildSessionClient(client) || typeof client.session.prompt !== "function") {
+              throw new Error("OpenCode SDK client does not expose synchronous child session prompt support");
+            }
+            const created = await client.session.create({
+              body: { parentID: toolContext.sessionID, title: `${args.agent}: ${args.description}` },
+              query: { directory: toolContext.directory },
+            });
+            const childID = childSessionID(created);
+            if (!childID) throw new Error("OpenCode SDK did not return a child session id");
+            const slots = modelSlots();
+            const selectedModel = args.model_slot ? slots[args.model_slot] : undefined;
+            const response = await client.session.prompt({
+              path: { id: childID },
+              query: { directory: toolContext.directory },
+              body: {
+                agent: args.agent,
+                ...(selectedModel ? { model: parseModelID(selectedModel) } : {}),
+                noReply: false,
+                parts: [{ type: "text", text: args.prompt }],
+              },
+            });
+            const output = assistantTextFromMessages([resultData(response)]);
+            if (!output) throw new Error("Child session completed without assistant text output");
+            const summary = await recordAgentResult(args.run_id, args.agent, childID, output, args.task_id);
+            return JSON.stringify({
+              completed: true,
+              child_session_id: childID,
+              agent: args.agent,
+              task_id: args.task_id,
+              model: selectedModel || "agent-default",
+              parsed: summary,
+              output,
+            }, null, 2);
+          } catch (error) {
+            return JSON.stringify({
+              completed: false,
+              agent: args.agent,
+              task_id: args.task_id,
+              fallback: `Use @${args.agent} with the supplied prompt, then record the result with cerebro_mailbox_send and cerebro_task_update.`,
+              error: error instanceof Error ? error.message : String(error),
+            }, null, 2);
+          }
+        },
+      }),
+
+      cerebro_collect_result: tool({
+        description: "Collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry.",
+        args: {
+          run_id: tool.schema.string().min(1),
+          child_session_id: tool.schema.string().min(1),
+          agent: tool.schema.enum(CEREBRO_AGENTS).optional(),
+          task_id: tool.schema.string().optional(),
+          limit: tool.schema.number().int().min(1).max(100).optional(),
+        },
+        async execute(args, toolContext) {
+          try {
+            if (!hasChildSessionClient(client) || typeof client.session.messages !== "function") {
+              throw new Error("OpenCode SDK client does not expose child session message listing");
+            }
+            const response = await client.session.messages({
+              path: { id: args.child_session_id },
+              query: { directory: toolContext.directory, limit: args.limit ?? 20 },
+            });
+            const output = assistantTextFromMessages(response);
+            if (!output) {
+              return JSON.stringify({ collected: false, child_session_id: args.child_session_id, message: "No assistant result found yet." }, null, 2);
+            }
+            const agent = args.agent ?? "child-session";
+            const summary = await recordAgentResult(args.run_id, agent, args.child_session_id, output, args.task_id);
+            return JSON.stringify({
+              collected: true,
+              child_session_id: args.child_session_id,
+              agent,
+              task_id: args.task_id,
+              parsed: summary,
+              output,
+            }, null, 2);
+          } catch (error) {
+            return JSON.stringify({
+              collected: false,
+              child_session_id: args.child_session_id,
               error: error instanceof Error ? error.message : String(error),
             }, null, 2);
           }

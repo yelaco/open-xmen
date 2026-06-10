@@ -1,4 +1,5 @@
 import { type AgentDefinition, type OpenCodeMeta, resolvePrompt, CEREBRO_RUNTIME_CONTRACT } from "./types.js";
+import { AGENT_MODEL_SLOTS, defaultModelChainForAgent } from "../config/models.js";
 
 const TASK_RESULT_CONTRACT = `## Output Contract
 
@@ -24,6 +25,10 @@ const DEFAULT_OPENCODE_META: OpenCodeMeta = {
   steps: 60,
   permission: { edit: "ask", bash: "ask", webfetch: "ask" },
 };
+
+function modelChain(agent: keyof typeof AGENT_MODEL_SLOTS) {
+  return defaultModelChainForAgent(agent);
+}
 
 export function makeAgent(
   name: string,
@@ -98,9 +103,9 @@ export function createLegionAgent(
     "Legion",
     "Customer/product-owner proxy for opinionated demand-side vision and acceptance.",
     LEGION_PROMPT,
-    "openai/gpt-5.4",
-    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "ask", bash: "ask", webfetch: "allow" } },
-    model ?? ["openai/gpt-5.4", "anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-8"],
+    modelChain("legion")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "ask", bash: "ask", webfetch: "allow", task: "deny" } },
+    model ?? modelChain("legion"),
     customPrompt,
     customAppendPrompt,
   );
@@ -182,9 +187,9 @@ export function createCypherAgent(
     "Cypher",
     "Business analyst turning vague intent into requirements, stories, and acceptance criteria.",
     CYPHER_PROMPT,
-    "openai/gpt-5.4",
-    { ...DEFAULT_OPENCODE_META, variant: "high" },
-    model ?? ["openai/gpt-5.4", "anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-8"],
+    modelChain("cypher")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "ask", bash: "ask", webfetch: "ask", task: "deny" } },
+    model ?? modelChain("cypher"),
     customPrompt,
     customAppendPrompt,
   );
@@ -225,9 +230,9 @@ export function createProfessorXAgent(
     "Professor X",
     "Strategic planner for complex Cerebro plans and product briefs.",
     PROFESSOR_X_PROMPT,
-    "openai/gpt-5.5",
-    { ...DEFAULT_OPENCODE_META, variant: "high" },
-    model ?? ["openai/gpt-5.5", "anthropic/claude-opus-4-8"],
+    modelChain("professor-x")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "ask", bash: "ask", webfetch: "ask", task: "deny" } },
+    model ?? modelChain("professor-x"),
     customPrompt,
     customAppendPrompt,
   );
@@ -253,9 +258,9 @@ export function createWolverineAgent(
     "Wolverine",
     "Implementation worker for code, tests, scripts, and bug fixes.",
     WOLVERINE_PROMPT,
-    "openai/gpt-5.5",
-    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask" } },
-    model ?? ["openai/gpt-5.5", "anthropic/claude-sonnet-4-6", "minimax/minimax-m3"],
+    modelChain("wolverine")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask", task: "deny", todowrite: "allow" } },
+    model ?? modelChain("wolverine"),
     customPrompt,
     customAppendPrompt,
   );
@@ -297,9 +302,9 @@ export function createStormAgent(
     "Storm",
     "Frontend and visual engineering worker for UI, accessibility, and responsive behavior.",
     STORM_PROMPT,
-    "openai/gpt-5.5",
-    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask" } },
-    model ?? ["openai/gpt-5.5", "anthropic/claude-sonnet-4-6"],
+    modelChain("storm")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask", task: "deny", todowrite: "allow" } },
+    model ?? modelChain("storm"),
     customPrompt,
     customAppendPrompt,
   );
@@ -362,9 +367,9 @@ export function createJeanGreyAgent(
     "Jean Grey",
     "Design strategist for component specs, UX flows, and design system decisions.",
     JEAN_GREY_PROMPT,
-    "openai/gpt-5.5",
-    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "ask", bash: "deny", webfetch: "allow" } },
-    model ?? ["openai/gpt-5.5", "anthropic/claude-opus-4-8"],
+    modelChain("jean-grey")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "ask", bash: "deny", webfetch: "allow", task: "deny" } },
+    model ?? modelChain("jean-grey"),
     customPrompt,
     customAppendPrompt,
   );
@@ -388,9 +393,9 @@ export function createForgeAgent(
     "Forge",
     "Architecture consultant for system design and tradeoff review.",
     FORGE_PROMPT,
-    "openai/gpt-5.5",
-    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "deny", bash: "ask", webfetch: "ask" } },
-    model ?? ["openai/gpt-5.5", "anthropic/claude-opus-4-8"],
+    modelChain("forge")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "deny", bash: "ask", webfetch: "ask", task: "deny" } },
+    model ?? modelChain("forge"),
     customPrompt,
     customAppendPrompt,
   );
@@ -414,9 +419,9 @@ export function createNightcrawlerAgent(
     "Nightcrawler",
     "Fast read-only codebase traversal and pattern discovery specialist.",
     NIGHTCRAWLER_PROMPT,
-    "openai/gpt-5.4-mini-fast",
-    { ...DEFAULT_OPENCODE_META, variant: "none", permission: { edit: "deny", bash: "allow", webfetch: "deny" } },
-    model ?? ["openai/gpt-5.4-mini-fast", "openai/gpt-5.4-mini"],
+    modelChain("nightcrawler")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "none", permission: { edit: "deny", bash: "allow", webfetch: "deny", task: "deny" } },
+    model ?? modelChain("nightcrawler"),
     customPrompt,
     customAppendPrompt,
   );
@@ -440,9 +445,9 @@ export function createSageAgent(
     "Sage",
     "Documentation and ecosystem researcher for current APIs and best practices.",
     SAGE_PROMPT,
-    "openai/gpt-5.4-mini-fast",
-    { ...DEFAULT_OPENCODE_META, variant: "none", permission: { edit: "deny", bash: "ask", webfetch: "allow" } },
-    model ?? ["openai/gpt-5.4-mini-fast", "openai/gpt-5.4-mini"],
+    modelChain("sage")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "none", permission: { edit: "deny", bash: "ask", webfetch: "allow", task: "deny" } },
+    model ?? modelChain("sage"),
     customPrompt,
     customAppendPrompt,
   );
@@ -482,9 +487,9 @@ export function createBeastAgent(
     "Beast",
     "Gap analyst and plan/code critique specialist.",
     BEAST_PROMPT,
-    "openai/gpt-5.5",
-    { ...DEFAULT_OPENCODE_META, variant: "high" },
-    model ?? ["openai/gpt-5.5", "anthropic/claude-opus-4-8"],
+    modelChain("emma-frost")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "deny", bash: "ask", webfetch: "ask", task: "deny" } },
+    model ?? modelChain("emma-frost"),
     customPrompt,
     customAppendPrompt,
   );
@@ -524,9 +529,9 @@ export function createEmmaFrostAgent(
     "Emma Frost",
     "Strict validation specialist for high-risk, high-accuracy decisions.",
     EMMA_FROST_PROMPT,
-    "openai/gpt-5.5",
-    { ...DEFAULT_OPENCODE_META, variant: "high" },
-    model ?? ["openai/gpt-5.5", "anthropic/claude-opus-4-8"],
+    modelChain("emma-frost")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "deny", bash: "ask", webfetch: "ask", task: "deny" } },
+    model ?? modelChain("emma-frost"),
     customPrompt,
     customAppendPrompt,
   );
@@ -547,6 +552,7 @@ You are Cyclops, Execution Layer Conductor. Cerebro gives you a plan and task li
 5. **Track todos** across workers under \`.cerebro/pending-todos/{run_id}/cyclops/\`.
 6. **Handle blockers**: if a worker returns \`STATUS: blocked\`, escalate to Cerebro with the blocker reason; do not spin.
 7. **Verify worker output**: after each TASK_RESULT, run the verification commands listed in the plan. If a check fails, route RETRY to the responsible worker with exact failure output and a specific fix directive. Maximum 2 retries per task before escalating.
+8. **Collect results durably**: for any worker result you need before continuing, call \`cerebro_agent_task\` with \`run_id\`, \`task_id\`, agent, prompt, and model slot. Use \`cerebro_dispatch_agent\` only for async work, then call \`cerebro_collect_result\` before marking a task done.
 
 ## Category Routing Table
 
@@ -563,10 +569,10 @@ You are Cyclops, Execution Layer Conductor. Cerebro gives you a plan and task li
 For any \`visual-engineering\` task, follow this exact three-step sequence:
 
 **Step 1 — Jean Grey (design spec)**
-Dispatch Jean Grey with the task description. Wait for \`DESIGN_SPEC_READY\`. Note the spec file path she writes under \`.cerebro/notepads/design/\`.
+Run Jean Grey through \`cerebro_agent_task\` with the task description. Wait for \`DESIGN_SPEC_READY\`. Note the spec file path she writes under \`.cerebro/notepads/design/\`.
 
 **Step 2 — Wolverine (component structure and logic)**
-Dispatch Wolverine with:
+Run Wolverine through \`cerebro_agent_task\` with:
 - The original task description
 - Jean Grey's spec file path (pass as context: "Jean Grey's design spec: {path}")
 - Current gotchas file path if it exists
@@ -574,7 +580,7 @@ Dispatch Wolverine with:
 Wolverine delivers component structure, behavior, state, events, and tests — no visual styling. Wait for \`TASK_RESULT\` and note the component file paths from FILES CHANGED.
 
 **Step 3 — Storm (visual layer)**
-Dispatch Storm with:
+Run Storm through \`cerebro_agent_task\` with:
 - The original task description
 - Jean Grey's spec file path (pass as context: "Apply the design spec at: {path}")
 - Wolverine's component file paths (pass as context: "Wolverine's components: {paths}")
@@ -623,9 +629,9 @@ export function createCyclopsAgent(
     "Cyclops",
     "Execution layer conductor: routes tasks by category to workers, tracks todos, verifies results.",
     CYCLOPS_PROMPT,
-    "openai/gpt-5.5",
-    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "deny" } },
-    model ?? ["openai/gpt-5.5", "anthropic/claude-sonnet-4-6"],
+    modelChain("cyclops")[0],
+    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "deny", task: "allow", todowrite: "allow" } },
+    model ?? modelChain("cyclops"),
     customPrompt,
     customAppendPrompt,
   );

@@ -33,9 +33,10 @@ Cyclops receives the plan+task list and owns all execution:
 
 1. Routes each task by `Category` to the correct worker chain.
 2. Respects `depends_on` — never dispatches a task whose dependencies are not yet done.
-3. Tracks todos under `.cerebro/pending-todos/{run_id}/cyclops/`.
-4. After each TASK_RESULT, runs verification commands from the plan. Retries (max 2) on failure with exact output routed back to the worker.
-5. Returns `EXECUTION_COMPLETE` or `EXECUTION_BLOCKED`.
+3. Uses `cerebro_agent_task` for result-required worker calls; uses `cerebro_dispatch_agent` plus `cerebro_collect_result` only for async work.
+4. Tracks todos under `.cerebro/pending-todos/{run_id}/cyclops/`.
+5. After each TASK_RESULT, runs verification commands from the plan. Retries (max 2) on failure with exact output routed back to the worker.
+6. Returns `EXECUTION_COMPLETE` or `EXECUTION_BLOCKED`.
 
 **Category routing table:**
 
@@ -53,8 +54,8 @@ Workers own their domain and return `TASK_RESULT` with files changed, tests run,
 
 ## Verification Standard
 
-Worker self-report is not enough. Cyclops runs the plan's verification commands after each TASK_RESULT and routes failures back to the responsible worker with exact output. Final synthesis happens only after `cerebro_verify_pending` confirms task-scoped todos are clear or explicitly blocked.
+Worker self-report is not enough. Cyclops collects child-session output into the mailbox/task ledger, runs the plan's verification commands after each TASK_RESULT, and routes failures back to the responsible worker with exact output. Final synthesis happens only after `cerebro_verify_pending` confirms task-scoped todos are clear or explicitly blocked.
 
 ## Multi-Model Resilience
 
-Each agent has a primary model and fallback chain in `options.model_fallbacks`. If the primary is unavailable, OpenCode tries fallbacks in order. Intelligence is in the system, not any single model. See `opencode/model-routing.md` for the full table.
+Each agent has a primary model and fallback chain in `options.model_fallbacks`. The canonical role-slot table lives in `opencode/model-routing.md` and is mirrored by `cerebro_model_slots`.

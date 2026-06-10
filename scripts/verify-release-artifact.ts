@@ -27,6 +27,16 @@ const requiredPackagedFiles = [
 
 const allowedTopLevelFiles = new Set(['package.json', 'README.md', 'AGENTS.md']);
 const forbiddenPackagedPathPattern = /(^|\/)\.env(\.|$|\/)|secret|credential|token|private[-_]?key|node_modules|__pycache__|\.pyc$|\.opencode\/|\.cerebro\/|\.claude\/|\.omx\/|\.sisyphus\//i;
+const requiredModelSlots = [
+  ['orchestrator', 'openai/gpt-5.5', 'CEREBRO_MODEL_ORCHESTRATOR'],
+  ['conductor', 'openai/gpt-5.5', 'CEREBRO_MODEL_CONDUCTOR'],
+  ['planner', 'openai/gpt-5.5', 'CEREBRO_MODEL_PLANNER'],
+  ['design', 'openai/gpt-5.5', 'CEREBRO_MODEL_DESIGN'],
+  ['analyst', 'openai/gpt-5.4', 'CEREBRO_MODEL_ANALYST'],
+  ['workers', 'openai/gpt-5.5', 'CEREBRO_MODEL_WORKERS'],
+  ['fast', 'openai/gpt-5.4-mini-fast', 'CEREBRO_MODEL_FAST'],
+  ['image', 'openai/gpt-image-2', 'CEREBRO_MODEL_IMAGE'],
+];
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -136,11 +146,32 @@ function verifyFreshInstall(tarballPath: string) {
     if (existsSync(path.join(projectDir, '.opencode/plugins/open-xmen.ts'))) {
       fail('Smoke install copied repo-local plugin bridge into installed project');
     }
+    verifyInstalledRuntime(projectDir);
 
     console.log('Running installed doctor...');
     run('node', [cliPath, 'doctor', '--dir', projectDir], { cwd: packageDir });
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
+function verifyInstalledRuntime(projectDir: string) {
+  const routing = readFileSync(path.join(projectDir, '.cerebro/opencode/model-routing.md'), 'utf8');
+  for (const [slot, model, env] of requiredModelSlots) {
+    if (!routing.includes(`\`${slot}\``)) fail(`Model routing missing slot ${slot}`);
+    if (!routing.includes(model)) fail(`Model routing missing default model ${model}`);
+    if (!routing.includes(env)) fail(`Model routing missing env override ${env}`);
+  }
+
+  const identity = readFileSync(path.join(projectDir, '.cerebro/cerebro-identity.md'), 'utf8');
+  for (const toolName of ['cerebro_agent_task', 'cerebro_collect_result', 'cerebro_dispatch_agent']) {
+    if (!identity.includes(toolName)) fail(`Cerebro identity missing tool ${toolName}`);
+  }
+
+  for (const file of ['cerebro.md', 'cyclops.md', 'wolverine.md', 'storm.md']) {
+    const text = readFileSync(path.join(projectDir, '.opencode/agents', file), 'utf8');
+    if (!text.includes('model_fallbacks:')) fail(`${file} missing model_fallbacks`);
+    if (!text.includes('permission:')) fail(`${file} missing permission frontmatter`);
   }
 }
 

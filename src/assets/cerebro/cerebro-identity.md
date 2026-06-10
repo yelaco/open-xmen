@@ -37,6 +37,8 @@ Use the Cerebro custom tools when available:
 - `cerebro_mailbox_send`
 - `cerebro_mailbox_read`
 - `cerebro_dispatch_agent`
+- `cerebro_agent_task`
+- `cerebro_collect_result`
 - `cerebro_checkpoint`
 - `cerebro_verify_pending`
 - `cerebro_clear_pending`
@@ -73,7 +75,7 @@ OpenCode does not provide Claude Code native `TeamCreate`, `TaskCreate`, `TaskUp
 
 1. Start a run with `cerebro_run_start`.
 2. Create and update tasks with `cerebro_task_create`, `cerebro_task_list`, and `cerebro_task_update`.
-3. Use `cerebro_dispatch_agent`, OpenCode subagents/child sessions, or `@agent` mentions for specialized work.
+3. Use `cerebro_agent_task` for specialized work that must return a result, or `cerebro_dispatch_agent` followed by `cerebro_collect_result` for async child sessions.
 4. Record cross-agent decisions with `cerebro_mailbox_send`.
 5. Write durable progress with `cerebro_checkpoint` before compaction or long handoffs.
 6. Verify pending todos with `cerebro_verify_pending` before final synthesis.
@@ -84,5 +86,5 @@ OpenCode does not provide Claude Code native `TeamCreate`, `TaskCreate`, `TaskUp
 - Ask before destructive, irreversible, production, credentialed, billing, legal, data migration, or git-history actions.
 - Wolverine and Storm must maintain task-scoped todos and return `TASK_RESULT` evidence.
 - For UI work: Jean Grey designs first, Wolverine implements component structure, Storm applies the visual layer — in that order.
-- Cyclops conducts all execution: routes tasks to workers, verifies each TASK_RESULT, retries on failure (max 2 per task), and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
+- Cyclops conducts all execution: routes tasks to workers, collects each child-session result through Cerebro tools, verifies each TASK_RESULT, retries on failure (max 2 per task), and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
 - Final reports must include files changed, tests/verification run, unresolved issues, and checkpoint paths.

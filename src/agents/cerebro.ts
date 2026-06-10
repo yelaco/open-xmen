@@ -1,5 +1,6 @@
 import { type AgentDefinition, CEREBRO_RUNTIME_CONTRACT } from "./types.js";
 import { makeAgent } from "./team.js";
+import { defaultModelChainForAgent } from "../config/models.js";
 
 const AGENT_DESCRIPTIONS: Record<string, string> = {
   legion: `@legion
@@ -153,9 +154,9 @@ export function createCerebroAgent(
     "Cerebro",
     "Cerebro team lead for preserved commands and OpenCode-native orchestration.",
     basePrompt,
-    "openai/gpt-5.5",
-    { mode: "primary", steps: 60, variant: "medium", permission: { edit: "ask", bash: "ask", webfetch: "ask" } },
-    model ?? ["openai/gpt-5.5", "anthropic/claude-sonnet-4-6"],
+    defaultModelChainForAgent("cerebro")[0],
+    { mode: "primary", steps: 60, variant: "medium", permission: { edit: "ask", bash: "ask", webfetch: "ask", task: "allow", question: "allow" } },
+    model ?? defaultModelChainForAgent("cerebro"),
     customPrompt,
     customAppendPrompt,
   );

@@ -44,6 +44,8 @@ Use the Cerebro custom tools when available:
 - \`cerebro_mailbox_send\`
 - \`cerebro_mailbox_read\`
 - \`cerebro_dispatch_agent\`
+- \`cerebro_agent_task\`
+- \`cerebro_collect_result\`
 - \`cerebro_checkpoint\`
 - \`cerebro_verify_pending\`
 - \`cerebro_clear_pending\`
@@ -80,7 +82,7 @@ OpenCode does not provide Claude Code native \`TeamCreate\`, \`TaskCreate\`, \`T
 
 1. Start a run with \`cerebro_run_start\`.
 2. Create and update tasks with \`cerebro_task_create\`, \`cerebro_task_list\`, and \`cerebro_task_update\`.
-3. Use \`cerebro_dispatch_agent\`, OpenCode subagents/child sessions, or \`@agent\` mentions for specialized work.
+3. Use \`cerebro_agent_task\` for specialized work that must return a result, or \`cerebro_dispatch_agent\` followed by \`cerebro_collect_result\` for async child sessions.
 4. Record cross-agent decisions with \`cerebro_mailbox_send\`.
 5. Write durable progress with \`cerebro_checkpoint\` before compaction or long handoffs.
 6. Verify pending todos with \`cerebro_verify_pending\` before final synthesis.
@@ -91,7 +93,7 @@ OpenCode does not provide Claude Code native \`TeamCreate\`, \`TaskCreate\`, \`T
 - Ask before destructive, irreversible, production, credentialed, billing, legal, data migration, or git-history actions.
 - Wolverine and Storm must maintain task-scoped todos and return \`TASK_RESULT\` evidence.
 - For UI work: Jean Grey designs first, Wolverine implements component structure, Storm applies the visual layer — in that order.
-- Cyclops conducts all execution: routes tasks to workers, verifies each TASK_RESULT, retries on failure (max 2 per task), and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
+- Cyclops conducts all execution: routes tasks to workers, collects each child-session result through Cerebro tools, verifies each TASK_RESULT, retries on failure (max 2 per task), and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
 - Final reports must include files changed, tests/verification run, unresolved issues, and checkpoint paths.
 ` },
   { path: ".cerebro/docs/agent-mapping.md", content: `# Agent Mapping
@@ -104,14 +106,13 @@ This runtime uses X-Men names for OpenCode specialist prompts. The names are par
 | Professor X | Strategic planner and interviewer | \`.cerebro/plans/\` only |
 | Beast | Gap analyst and plan critic | Read-only |
 | Emma Frost | Plan validator | Read-only |
-| Cyclops | Post-implementation verification engine | Read files and bash only; no code edits |
+| Cyclops | Execution layer conductor and verifier | Runtime ledgers, task routing, bash verification; source edits only by delegated workers |
 | Wolverine | Sole implementation specialist — backend and frontend logic, structure, tests | Codebase, excluding \`.cerebro/plans/\` |
 | Jean Grey | Design strategist | \`.cerebro/notepads/design/\` only |
 | Storm | Visual engineering — CSS, animations, tokens, responsive, accessibility | Style and component files |
 | Forge | Architecture consultant | Read-only |
 | Nightcrawler | Codebase traversal and pattern search | Read-only |
 | Sage | Documentation and knowledge retrieval | Read-only |
-| Storm | Frontend and visual engineering | UI/frontend files |
 
 ## Runtime Files
 
@@ -178,7 +179,8 @@ flowchart TB
         Route --> NC["explore: Nightcrawler"]
         Route --> SG["research: Sage"]
         Route --> WV["deep/quick/default:\\nWolverine"]
-        WJ & FG & NC & SG & WV --> Verify["Cyclops Verification\\n(run commands, check evidence)"]
+        WJ & FG & NC & SG & WV --> Collect["Collect TASK_RESULT\\n(mailbox + task ledger)"]
+        Collect --> Verify["Cyclops Verification\\n(run commands, check evidence)"]
         Verify -->|"FAIL (≤2 retries)"| Route
     end
 
@@ -217,7 +219,7 @@ flowchart TB
 | \`.cerebro/boulder.json\` | Cerebro | Business-level execution checkpoint: active plan, overall status, approvals, verification history, and decisions. Task progress lives in \`.cerebro/team-runs/{run-id}.tasks.json\`. |
 | \`.cerebro/team-runs/{run-id}.json\` | Cerebro | Run manifest for command, team name, teammates, approvals, mailbox decisions, verification, and cleanup. |
 | \`.cerebro/team-runs/{run-id}.tasks.json\` | Cerebro | OpenCode-managed task ledger updated by \`cerebro_task_create/list/update\`. |
-| \`.cerebro/team-runs/{run-id}.mailbox.jsonl\` | Cerebro team | Mailbox log written by \`cerebro_mailbox_send\` and read by \`cerebro_mailbox_read\`. |
+| \`.cerebro/team-runs/{run-id}.mailbox.jsonl\` | Cerebro team | Mailbox log written by \`cerebro_mailbox_send\`, \`cerebro_agent_task\`, \`cerebro_dispatch_agent\`, and \`cerebro_collect_result\`; read by \`cerebro_mailbox_read\`. |
 | \`.cerebro/team-runs/{run-id}.checkpoints.jsonl\` | Cerebro team | Durable checkpoints written by \`cerebro_checkpoint\`. |
 | \`.cerebro/notepads/{plan}/conventions.md\` | Cerebro | Coding patterns, naming, file structure, UI patterns. |
 | \`.cerebro/notepads/{plan}/commands.md\` | Cerebro | Useful install/test/lint/build/dev commands. |
@@ -272,9 +274,10 @@ Cyclops receives the plan+task list and owns all execution:
 
 1. Routes each task by \`Category\` to the correct worker chain.
 2. Respects \`depends_on\` — never dispatches a task whose dependencies are not yet done.
-3. Tracks todos under \`.cerebro/pending-todos/{run_id}/cyclops/\`.
-4. After each TASK_RESULT, runs verification commands from the plan. Retries (max 2) on failure with exact output routed back to the worker.
-5. Returns \`EXECUTION_COMPLETE\` or \`EXECUTION_BLOCKED\`.
+3. Uses \`cerebro_agent_task\` for result-required worker calls; uses \`cerebro_dispatch_agent\` plus \`cerebro_collect_result\` only for async work.
+4. Tracks todos under \`.cerebro/pending-todos/{run_id}/cyclops/\`.
+5. After each TASK_RESULT, runs verification commands from the plan. Retries (max 2) on failure with exact output routed back to the worker.
+6. Returns \`EXECUTION_COMPLETE\` or \`EXECUTION_BLOCKED\`.
 
 **Category routing table:**
 
@@ -292,11 +295,11 @@ Workers own their domain and return \`TASK_RESULT\` with files changed, tests ru
 
 ## Verification Standard
 
-Worker self-report is not enough. Cyclops runs the plan's verification commands after each TASK_RESULT and routes failures back to the responsible worker with exact output. Final synthesis happens only after \`cerebro_verify_pending\` confirms task-scoped todos are clear or explicitly blocked.
+Worker self-report is not enough. Cyclops collects child-session output into the mailbox/task ledger, runs the plan's verification commands after each TASK_RESULT, and routes failures back to the responsible worker with exact output. Final synthesis happens only after \`cerebro_verify_pending\` confirms task-scoped todos are clear or explicitly blocked.
 
 ## Multi-Model Resilience
 
-Each agent has a primary model and fallback chain in \`options.model_fallbacks\`. If the primary is unavailable, OpenCode tries fallbacks in order. Intelligence is in the system, not any single model. See \`opencode/model-routing.md\` for the full table.
+Each agent has a primary model and fallback chain in \`options.model_fallbacks\`. The canonical role-slot table lives in \`opencode/model-routing.md\` and is mirrored by \`cerebro_model_slots\`.
 ` },
   { path: ".cerebro/docs/overview.md", content: `# Cerebro OpenCode Runtime
 
@@ -402,53 +405,57 @@ Pass \`--index .cerebro/semble-index\` to searches. Reindex if the codebase chan
 ` },
   { path: ".cerebro/opencode/model-routing.md", content: `# Cerebro OpenCode Model Routing
 
-GPT-5.5 is used for agents that require deep reasoning: Cerebro (orchestrator), Professor X (planner), Beast (gap analyst), Forge (architecture), Emma Frost (validator), Jean Grey (design), Wolverine (implementation), Storm (visual), Cyclops (execution conductor). GPT-5.4 handles product/analyst work; mini handles fast retrieval.
+This runtime uses one canonical role-slot table. Agent frontmatter, \`cerebro_model_slots\`, command defaults, docs, and validators must agree with these slots.
 
 ## Primary Model Table
 
-| Slot | Model | Variant | Agents |
+| Slot | Default model | Variant | Agents |
 |---|---|---|---|
 | \`orchestrator\` | \`openai/gpt-5.5\` | medium | Cerebro |
-| \`conductor\` | \`openai/gpt-5.5\` | medium | Cyclops — execution layer conductor |
+| \`conductor\` | \`openai/gpt-5.5\` | medium | Cyclops |
 | \`planner\` | \`openai/gpt-5.5\` | high | Professor X, Beast, Forge, Emma Frost |
 | \`design\` | \`openai/gpt-5.5\` | high | Jean Grey |
 | \`analyst\` | \`openai/gpt-5.4\` | high | Legion, Cypher |
-| \`workers\` | \`openai/gpt-5.5\` | medium | Wolverine, Storm — implementation quality matters |
+| \`workers\` | \`openai/gpt-5.5\` | medium | Wolverine, Storm |
 | \`fast\` | \`openai/gpt-5.4-mini-fast\` | none | Nightcrawler, Sage |
 | \`image\` | \`openai/gpt-image-2\` | — | Image/design asset generation only |
 
 ## Multi-Model Fallback Chains
 
-Each agent carries a fallback chain in \`options.model_fallbacks\`. If the primary model is unavailable, OpenCode tries fallbacks in order. Intelligence is in the system, not any single model.
+Each generated agent has a primary model and \`options.model_fallbacks\`. If the primary is unavailable, OpenCode can try fallbacks in order.
 
-| Agent | Primary | Fallbacks |
-|---|---|---|
-| Cerebro | \`openai/gpt-5.5\` | \`anthropic/claude-sonnet-4-6\` |
-| Cyclops | \`openai/gpt-5.5\` | \`anthropic/claude-sonnet-4-6\` |
-| Professor X | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
-| Beast | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
-| Forge | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
-| Emma Frost | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
-| Jean Grey | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
-| Wolverine | \`openai/gpt-5.5\` | \`anthropic/claude-sonnet-4-6\`, \`minimax/minimax-m3\` |
-| Storm | \`openai/gpt-5.5\` | \`anthropic/claude-sonnet-4-6\` |
-| Legion | \`openai/gpt-5.4\` | \`anthropic/claude-sonnet-4-6\`, \`anthropic/claude-opus-4-8\` |
-| Cypher | \`openai/gpt-5.4\` | \`anthropic/claude-sonnet-4-6\`, \`anthropic/claude-opus-4-8\` |
-| Nightcrawler | \`openai/gpt-5.4-mini-fast\` | \`openai/gpt-5.4-mini\` |
-| Sage | \`openai/gpt-5.4-mini-fast\` | \`openai/gpt-5.4-mini\` |
+| Agent | Slot | Primary | Fallbacks |
+|---|---|---|---|
+| Cerebro | \`orchestrator\` | \`openai/gpt-5.5\` | \`anthropic/claude-sonnet-4-6\` |
+| Cyclops | \`conductor\` | \`openai/gpt-5.5\` | \`anthropic/claude-sonnet-4-6\` |
+| Professor X | \`planner\` | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
+| Beast | \`planner\` | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
+| Forge | \`planner\` | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
+| Emma Frost | \`planner\` | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
+| Jean Grey | \`design\` | \`openai/gpt-5.5\` | \`anthropic/claude-opus-4-8\` |
+| Legion | \`analyst\` | \`openai/gpt-5.4\` | \`anthropic/claude-sonnet-4-6\`, \`anthropic/claude-opus-4-8\` |
+| Cypher | \`analyst\` | \`openai/gpt-5.4\` | \`anthropic/claude-sonnet-4-6\`, \`anthropic/claude-opus-4-8\` |
+| Wolverine | \`workers\` | \`openai/gpt-5.5\` | \`anthropic/claude-sonnet-4-6\`, \`minimax/minimax-m3\` |
+| Storm | \`workers\` | \`openai/gpt-5.5\` | \`anthropic/claude-sonnet-4-6\` |
+| Nightcrawler | \`fast\` | \`openai/gpt-5.4-mini-fast\` | \`openai/gpt-5.4-mini\` |
+| Sage | \`fast\` | \`openai/gpt-5.4-mini-fast\` | \`openai/gpt-5.4-mini\` |
 
 ## Environment Overrides
 
-- \`CEREBRO_MODEL_ORCHESTRATOR\` (override Cerebro's model)
-- \`CEREBRO_MODEL_CONDUCTOR\` (override Cyclops's model)
+Override slots with these variables. Legacy variables (\`CEREBRO_MODEL_FRONTIER\`, \`CEREBRO_MODEL_STRONG\`, \`CEREBRO_MODEL_CODING\`) are accepted only as migration fallbacks by the plugin; new installs should use the canonical names below.
+
+- \`CEREBRO_MODEL_ORCHESTRATOR\`
+- \`CEREBRO_MODEL_CONDUCTOR\`
 - \`CEREBRO_MODEL_PLANNER\`
+- \`CEREBRO_MODEL_DESIGN\`
 - \`CEREBRO_MODEL_ANALYST\`
+- \`CEREBRO_MODEL_WORKERS\`
 - \`CEREBRO_MODEL_FAST\`
 - \`CEREBRO_MODEL_IMAGE\`
 
 ## Routing Policy
 
-Route to \`planner\` (gpt-5.5 high) for any task where output quality gates downstream work — planning, gap review, architecture decisions, design specs, and final validation. Use \`orchestrator\`/\`conductor\` (gpt-5.5 medium) for Cerebro and Cyclops; medium variant keeps orchestration responsive. Use \`workers\` (gpt-5.5 medium) for implementation — quality matters but full high-variant reasoning is not needed on every line. Use \`fast\` (mini none) for pure retrieval and search.
+Use \`orchestrator\` for Cerebro command interpretation, \`conductor\` for Cyclops execution coordination, \`planner\`/\`design\` for outputs that gate downstream quality, \`analyst\` for customer and requirements work, \`workers\` for implementation, and \`fast\` for bounded retrieval/search.
 ` },
   { path: ".cerebro/schemas/boulder.schema.json", content: `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -875,7 +882,7 @@ def main() -> int:
     args = parser.parse_args()
 
     instruction_status = instruction_files_status()
-    plugin_status = "PRESENT" if Path(".opencode/plugins/open-xmen.ts").is_file() else "MISSING"
+    plugin_status = "PRESENT" if _has_open_xmen_plugin() or Path(".opencode/plugins/open-xmen.ts").is_file() else "MISSING"
 
     missing = [str(path) for path, status in instruction_status.items() if status == "MISSING"]
     status = {
@@ -900,6 +907,36 @@ def main() -> int:
 
 def instruction_files_status() -> dict[Path, str]:
     return {path: ("PRESENT" if path.is_file() else "MISSING") for path in OPENCODE_INSTRUCTIONS}
+
+
+def _has_open_xmen_plugin() -> bool:
+    path = Path("opencode.jsonc")
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8")
+    if '"open-xmen"' in text or "'open-xmen'" in text or ".opencode/plugins/open-xmen.ts" in text:
+        return True
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    plugins = data.get("plugin", []) if isinstance(data, dict) else []
+    for entry in plugins:
+        spec = entry[0] if isinstance(entry, list) and entry else entry
+        if isinstance(spec, str) and _is_local_open_xmen_package(spec):
+            return True
+    return False
+
+
+def _is_local_open_xmen_package(spec: str) -> bool:
+    package_json = Path(spec).expanduser() / "package.json"
+    if not package_json.is_file():
+        return False
+    try:
+        data = json.loads(package_json.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    return isinstance(data, dict) and data.get("name") == "open-xmen"
 
 
 if __name__ == "__main__":
@@ -1165,6 +1202,7 @@ if __name__ == "__main__":
 """Validate Cerebro OpenCode runtime files."""
 
 import re
+import json
 from pathlib import Path
 
 REQUIRED_AGENTS = {
@@ -1189,7 +1227,17 @@ REQUIRED_COMMANDS = {
     "cerebro-doctor",
     "to-me-my-x-men",
 }
-MODEL_PATTERN = re.compile(r"openai/[A-Za-z0-9._/-]+")
+MODEL_PATTERN = re.compile(r"(?:openai|anthropic|minimax)/[A-Za-z0-9._/-]+")
+REQUIRED_SLOTS = {
+    "orchestrator": ("openai/gpt-5.5", "CEREBRO_MODEL_ORCHESTRATOR"),
+    "conductor": ("openai/gpt-5.5", "CEREBRO_MODEL_CONDUCTOR"),
+    "planner": ("openai/gpt-5.5", "CEREBRO_MODEL_PLANNER"),
+    "design": ("openai/gpt-5.5", "CEREBRO_MODEL_DESIGN"),
+    "analyst": ("openai/gpt-5.4", "CEREBRO_MODEL_ANALYST"),
+    "workers": ("openai/gpt-5.5", "CEREBRO_MODEL_WORKERS"),
+    "fast": ("openai/gpt-5.4-mini-fast", "CEREBRO_MODEL_FAST"),
+    "image": ("openai/gpt-image-2", "CEREBRO_MODEL_IMAGE"),
+}
 
 
 def main() -> int:
@@ -1197,14 +1245,24 @@ def main() -> int:
     for path in [
         "opencode.jsonc",
         "AGENTS.md",
-        ".opencode/plugins/open-xmen.ts",
         ".cerebro/cerebro-identity.md",
         ".cerebro/opencode/model-routing.md",
     ]:
         if not Path(path).is_file():
             errors.append(f"missing {path}")
 
+    if not _has_open_xmen_plugin(Path("opencode.jsonc")) and not Path(".opencode/plugins/open-xmen.ts").is_file():
+        errors.append("opencode.jsonc must include open-xmen plugin entry or .opencode/plugins/open-xmen.ts bridge must exist")
+
     allowed_models = _configured_models(Path(".cerebro/opencode/model-routing.md"))
+    routing_text = Path(".cerebro/opencode/model-routing.md").read_text(encoding="utf-8") if Path(".cerebro/opencode/model-routing.md").is_file() else ""
+    for slot, (model, env) in REQUIRED_SLOTS.items():
+        if f"\`{slot}\`" not in routing_text:
+            errors.append(f"model routing missing slot {slot}")
+        if model not in routing_text:
+            errors.append(f"model routing missing default model {model}")
+        if env not in routing_text:
+            errors.append(f"model routing missing env override {env}")
 
     agent_dir = Path(".opencode/agents")
     seen_agents = {path.stem for path in agent_dir.glob("*.md")} if agent_dir.is_dir() else set()
@@ -1218,6 +1276,8 @@ def main() -> int:
         model = _frontmatter_value(text, "model")
         if model and model not in allowed_models:
             errors.append(f"{path}: model {model!r} is outside configured model availability")
+        if "model_fallbacks:" not in text:
+            errors.append(f"{path}: missing model_fallbacks")
 
     command_dir = Path(".opencode/commands")
     seen_commands = {path.stem for path in command_dir.glob("*.md")} if command_dir.is_dir() else set()
@@ -1234,6 +1294,35 @@ def main() -> int:
         return 1
     print("opencode runtime ok")
     return 0
+
+
+def _has_open_xmen_plugin(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8")
+    if '"open-xmen"' in text or "'open-xmen'" in text or ".opencode/plugins/open-xmen.ts" in text:
+        return True
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    plugins = data.get("plugin", []) if isinstance(data, dict) else []
+    for entry in plugins:
+        spec = entry[0] if isinstance(entry, list) and entry else entry
+        if isinstance(spec, str) and _is_local_open_xmen_package(spec):
+            return True
+    return False
+
+
+def _is_local_open_xmen_package(spec: str) -> bool:
+    package_json = Path(spec).expanduser() / "package.json"
+    if not package_json.is_file():
+        return False
+    try:
+        data = json.loads(package_json.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    return isinstance(data, dict) and data.get("name") == "open-xmen"
 
 
 def _frontmatter_value(text: str, key: str) -> str | None:
@@ -1941,9 +2030,10 @@ variant: high
 temperature: 0.2
 steps: 60
 permission:
-  edit: ask
+  edit: deny
   bash: ask
   webfetch: ask
+  task: deny
 options:
   model_fallbacks:
     - anthropic/claude-opus-4-8
@@ -1972,6 +2062,7 @@ For code review, every concrete finding must include \`file:line\` when the file
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -1986,6 +2077,8 @@ permission:
   edit: ask
   bash: ask
   webfetch: ask
+  task: allow
+  question: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2114,6 +2207,7 @@ Workers (Wolverine, Storm) maintain task-scoped todo files under \`.cerebro/pend
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2128,6 +2222,8 @@ permission:
   edit: ask
   bash: allow
   webfetch: deny
+  task: allow
+  todowrite: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2145,6 +2241,7 @@ You are Cyclops, Execution Layer Conductor. Cerebro gives you a plan and task li
 5. **Track todos** across workers under \`.cerebro/pending-todos/{run_id}/cyclops/\`.
 6. **Handle blockers**: if a worker returns \`STATUS: blocked\`, escalate to Cerebro with the blocker reason; do not spin.
 7. **Verify worker output**: after each TASK_RESULT, run the verification commands listed in the plan. If a check fails, route RETRY to the responsible worker with exact failure output and a specific fix directive. Maximum 2 retries per task before escalating.
+8. **Collect results durably**: for any worker result you need before continuing, call \`cerebro_agent_task\` with \`run_id\`, \`task_id\`, agent, prompt, and model slot. Use \`cerebro_dispatch_agent\` only for async work, then call \`cerebro_collect_result\` before marking a task done.
 
 ## Category Routing Table
 
@@ -2161,10 +2258,10 @@ You are Cyclops, Execution Layer Conductor. Cerebro gives you a plan and task li
 For any \`visual-engineering\` task, follow this exact three-step sequence:
 
 **Step 1 — Jean Grey (design spec)**
-Dispatch Jean Grey with the task description. Wait for \`DESIGN_SPEC_READY\`. Note the spec file path she writes under \`.cerebro/notepads/design/\`.
+Run Jean Grey through \`cerebro_agent_task\` with the task description. Wait for \`DESIGN_SPEC_READY\`. Note the spec file path she writes under \`.cerebro/notepads/design/\`.
 
 **Step 2 — Wolverine (component structure and logic)**
-Dispatch Wolverine with:
+Run Wolverine through \`cerebro_agent_task\` with:
 - The original task description
 - Jean Grey's spec file path (pass as context: "Jean Grey's design spec: {path}")
 - Current gotchas file path if it exists
@@ -2172,7 +2269,7 @@ Dispatch Wolverine with:
 Wolverine delivers component structure, behavior, state, events, and tests — no visual styling. Wait for \`TASK_RESULT\` and note the component file paths from FILES CHANGED.
 
 **Step 3 — Storm (visual layer)**
-Dispatch Storm with:
+Run Storm through \`cerebro_agent_task\` with:
 - The original task description
 - Jean Grey's spec file path (pass as context: "Apply the design spec at: {path}")
 - Wolverine's component file paths (pass as context: "Wolverine's components: {paths}")
@@ -2213,6 +2310,7 @@ WAITING_ON: [agent or external]
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2227,6 +2325,7 @@ permission:
   edit: ask
   bash: ask
   webfetch: ask
+  task: deny
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2298,6 +2397,7 @@ REQUIREMENTS RULING: READY | NEEDS PLAN | TOO AMBIGUOUS
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2309,9 +2409,10 @@ variant: high
 temperature: 0.2
 steps: 60
 permission:
-  edit: ask
+  edit: deny
   bash: ask
   webfetch: ask
+  task: deny
 options:
   model_fallbacks:
     - anthropic/claude-opus-4-8
@@ -2340,6 +2441,7 @@ REQUIRED FIXES:
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2354,6 +2456,7 @@ permission:
   edit: deny
   bash: ask
   webfetch: ask
+  task: deny
 options:
   model_fallbacks:
     - anthropic/claude-opus-4-8
@@ -2366,6 +2469,7 @@ You are Forge, architecture consultant. Stay read-only. Clarify architecture, ri
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2380,6 +2484,7 @@ permission:
   edit: ask
   bash: deny
   webfetch: allow
+  task: deny
 options:
   model_fallbacks:
     - anthropic/claude-opus-4-8
@@ -2431,6 +2536,7 @@ SUGGESTIONS:
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2445,6 +2551,7 @@ permission:
   edit: ask
   bash: ask
   webfetch: allow
+  task: deny
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2481,6 +2588,7 @@ NEXT DEMAND: [single most important improvement, or NONE]
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2495,6 +2603,7 @@ permission:
   edit: deny
   bash: allow
   webfetch: deny
+  task: deny
 options:
   model_fallbacks:
     - openai/gpt-5.4-mini
@@ -2507,6 +2616,7 @@ You are Nightcrawler, fast codebase scout. Stay read-only. Use glob, grep, read,
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2521,6 +2631,7 @@ permission:
   edit: ask
   bash: ask
   webfetch: ask
+  task: deny
 options:
   model_fallbacks:
     - anthropic/claude-opus-4-8
@@ -2550,6 +2661,7 @@ Do not promote drafts into \`.cerebro/plans/\`; Cerebro owns final approval and 
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2564,6 +2676,7 @@ permission:
   edit: deny
   bash: ask
   webfetch: allow
+  task: deny
 options:
   model_fallbacks:
     - openai/gpt-5.4-mini
@@ -2576,6 +2689,7 @@ You are Sage, knowledge researcher. Prefer official/upstream docs. Return source
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2590,6 +2704,8 @@ permission:
   edit: ask
   bash: allow
   webfetch: ask
+  task: deny
+  todowrite: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2637,6 +2753,7 @@ ISSUES:
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2651,6 +2768,8 @@ permission:
   edit: ask
   bash: allow
   webfetch: ask
+  task: deny
+  todowrite: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2666,6 +2785,7 @@ Use TDD when practical. Maintain task-scoped todos under .cerebro/pending-todos/
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
+- When dispatching specialized work, prefer \`cerebro_agent_task\` for result-required work; use \`cerebro_dispatch_agent\` only for async fire-and-collect flows, then call \`cerebro_collect_result\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
 - If assigned implementation or UI work, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\`.` },
@@ -2682,10 +2802,11 @@ Check and report PASS/FAIL for:
 2. \`.opencode/agents/\` contains all Cerebro role agents.
 3. \`.opencode/commands/\` contains preserved command names.
 4. \`.cerebro/cerebro-identity.md\`, schemas, templates, plans, notepads, and team-runs exist.
-5. \`cerebro_model_slots\` returns only available configured models.
-6. \`cerebro_verify_pending\` correctly reports clear or blocked pending todos.
-7. Type/package validation if available: \`npm run build\`.
-8. Existing schema validators if available: \`.cerebro/scripts/validate-boulder.py\`, \`.cerebro/scripts/validate-team-runs.py\`.
+5. \`cerebro_model_slots\` returns canonical role slots only: orchestrator, conductor, planner, design, analyst, workers, fast, image.
+6. Result tools exist and are usable by the runtime contract: \`cerebro_agent_task\`, \`cerebro_collect_result\`, and \`cerebro_dispatch_agent\`.
+7. \`cerebro_verify_pending\` correctly reports clear or blocked pending todos.
+8. Type/package validation if available: \`npm run build\`.
+9. Existing schema validators if available: \`.cerebro/scripts/validate-boulder.py\`, \`.cerebro/scripts/validate-team-runs.py\`.
 
 Summarize exact failures and suggested fixes.` },
   { path: ".opencode/commands/cerebro-index.md", content: `---
@@ -2704,7 +2825,7 @@ Create or refresh \`.cerebro/project-context.md\` for this repository.
    - \`sage\`: identify frameworks, package managers, docs, version gotchas, likely verification commands.
    - \`forge\`: summarize architecture, ownership boundaries, and risky areas.
    - \`beast\`: gap-check the final index for invented facts and weak verification guidance.
-4. Use OpenCode subagents/mentions for the tasks where available; otherwise do the read-only inspection directly but still record task state.
+4. Use \`cerebro_agent_task\` or OpenCode subagents/mentions for the tasks where available; otherwise do the read-only inspection directly but still record task state.
 5. Fill \`.cerebro/templates/project-context.md\` with discovered facts only. Use \`Unknown\` for unknown fields.
 6. Write \`.cerebro/project-context.md\`.
 7. Record mailbox decisions for conflicting findings, checkpoint the run, verify pending todos, and report the indexed stack, commands, risky areas, manifest path, and cleanup status.
@@ -2723,14 +2844,14 @@ Plan this work: $ARGUMENTS
 2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-plan\` and initial risk classification.
 3. **Classify intent sub-type**: \`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`. Announce it in one line.
 4. Gather codebase context: use Nightcrawler for structure and Sage for relevant docs before the interview begins.
-5. **Legion** (product-shaped or user-facing work only): dispatch Legion to produce customer vision. Pass Legion's \`CUSTOMER_VISION_READY\` to Cypher as context.
-6. **Cypher** (\`MODE: interactive\`): dispatch Cypher with the request, intent sub-type, Legion's vision (if produced), and \`MODE: interactive\`. Run the interview loop:
+5. **Legion** (product-shaped or user-facing work only): run Legion through \`cerebro_agent_task\` to produce customer vision. Pass Legion's \`CUSTOMER_VISION_READY\` to Cypher as context.
+6. **Cypher** (\`MODE: interactive\`): run Cypher through \`cerebro_agent_task\` with the request, intent sub-type, Legion's vision (if produced), and \`MODE: interactive\`. Run the interview loop:
    - Cypher returns \`CLARIFY\` with a prioritized question list.
    - Present the questions to the user in a clean numbered list (in Cerebro's voice — do not expose Cypher's raw block).
    - Collect answers and pass back to Cypher.
    - Repeat until Cypher returns \`REQUIREMENTS_READY\` (max 3 rounds).
 7. **Professor X**: draft the plan from \`REQUIREMENTS_READY\` using \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task must include a \`Category\` field (visual-engineering | architecture | explore | research | deep | quick).
-8. **Beast**: gap review. **Emma Frost**: validate if HIGH risk, public API, auth, data, billing, or migration work.
+8. **Beast**: gap review through \`cerebro_agent_task\`. **Emma Frost**: validate through \`cerebro_agent_task\` if HIGH risk, public API, auth, data, billing, or migration work.
 9. Iterate on the plan until all review blockers are resolved.
 10. Write the approved plan to \`.cerebro/plans/{slug}.md\`.
 11. Checkpoint and report: plan path, risk, approval gates, acceptance criteria, and verification commands.
@@ -2749,13 +2870,13 @@ Execute or resume the latest Cerebro plan.
 2. Read the newest \`.cerebro/plans/*.md\`, \`.cerebro/project-context.md\` if present, \`.cerebro/boulder.json\` if present, and relevant \`.cerebro/notepads/\`.
 3. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-start-work\`, objective from the plan, and the plan risk.
 4. Create task records for each task in the plan. Each task must have a \`category\` field (visual-engineering | architecture | explore | research | deep | quick).
-5. **Dispatch Cyclops as execution conductor**: hand off the full task list, run_id, and plan context. Cyclops owns all worker routing, sequencing, todo tracking, wisdom accumulation, and result verification from this point.
+5. **Run Cyclops as execution conductor through \`cerebro_agent_task\`**: hand off the full task list, run_id, and plan context. Cyclops owns all worker routing, sequencing, todo tracking, wisdom accumulation, child-session result collection, and result verification from this point.
    - Cyclops routes by category: visual-engineering→Jean Grey→Wolverine→Storm, architecture→Forge, explore→Nightcrawler, research→Sage, deep/quick/default→Wolverine.
    - Cyclops handles retries (max 2 per task) and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
-6. On EXECUTION_BLOCKED: unblock or escalate; re-dispatch Cyclops to resume from the blocked task.
+6. On EXECUTION_BLOCKED: unblock or escalate; re-run Cyclops through \`cerebro_agent_task\` to resume from the blocked task.
 7. Record decisions and blockers with \`cerebro_mailbox_send\`; update task state with \`cerebro_task_update\`.
 8. Update \`.cerebro/boulder.json\` with status, approvals, verification history, and decisions.
-9. **Legion acceptance** (product-shaped plans only): if the plan includes user-facing acceptance criteria or was derived from Legion/Cypher notepads, dispatch Legion for a final customer acceptance verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-dispatches Cyclops before the run completes.
+9. **Legion acceptance** (product-shaped plans only): if the plan includes user-facing acceptance criteria or was derived from Legion/Cypher notepads, run Legion through \`cerebro_agent_task\` for a final customer acceptance verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-runs Cyclops before the run completes.
 10. Call \`cerebro_verify_pending\`; do not final-report while pending todos remain.
 11. Final report: plan path, files changed, tests run, verification evidence, Legion verdict (if run), unresolved issues, rollback notes, and checkpoint paths.` },
   { path: ".opencode/commands/to-me-my-x-men.md", content: `---
@@ -2773,14 +2894,14 @@ The user has given one prompt and expects a complete result with no further ques
 
 1. Announce maximum Cerebro power and the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`).
 2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/to-me-my-x-men\` and classified risk.
-3. **Legion** (product-shaped work only): dispatch Legion to produce customer vision from the prompt and codebase. Legion writes \`CUSTOMER_VISION_READY\` under \`.cerebro/notepads/customer/\` — no user questions.
-4. **Cypher** (\`MODE: autonomous\`): dispatch Cypher with the original prompt, intent sub-type, Legion's vision (if produced), and \`MODE: autonomous\`. Cypher produces \`REQUIREMENTS_READY\` directly — using safe defaults and documenting all assumptions. No CLARIFY rounds.
+3. **Legion** (product-shaped work only): run Legion through \`cerebro_agent_task\` to produce customer vision from the prompt and codebase. Legion writes \`CUSTOMER_VISION_READY\` under \`.cerebro/notepads/customer/\` — no user questions.
+4. **Cypher** (\`MODE: autonomous\`): run Cypher through \`cerebro_agent_task\` with the original prompt, intent sub-type, Legion's vision (if produced), and \`MODE: autonomous\`. Cypher produces \`REQUIREMENTS_READY\` directly — using safe defaults and documenting all assumptions. No CLARIFY rounds.
 5. **Professor X**: draft the plan from \`REQUIREMENTS_READY\` using \`.cerebro/templates/plan.md\` or \`.cerebro/templates/product-brief.md\`. Each task must include a \`Category\` field (visual-engineering | architecture | explore | research | deep | quick).
 6. **Beast**: gap review. **Emma Frost**: validate if HIGH risk, auth, billing, migration, or data-integrity work.
 7. Write approved plan to \`.cerebro/plans/{slug}.md\`.
-8. Create task records and **dispatch Cyclops as execution conductor**: hand off the full task list, run_id, and plan. Cyclops routes by category, manages worker sequencing, tracks wisdom, verifies results, and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
+8. Create task records and **run Cyclops as execution conductor through \`cerebro_agent_task\`**: hand off the full task list, run_id, and plan. Cyclops routes by category, manages worker sequencing, tracks wisdom, collects worker results, verifies results, and returns EXECUTION_COMPLETE or EXECUTION_BLOCKED.
 9. On EXECUTION_BLOCKED: resolve autonomously if possible; escalate to user only if truly unresolvable.
-10. **Legion acceptance** (product-shaped work only): dispatch Legion for a final customer verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-dispatches Cyclops.
+10. **Legion acceptance** (product-shaped work only): run Legion through \`cerebro_agent_task\` for a final customer verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-runs Cyclops.
 11. Call \`cerebro_verify_pending\`; final-report only when todos are clear or explicitly blocked.
 
 Final report: assumptions made, files changed, tests/verification, customer verdict (if run), unresolved issues, \`.cerebro\` run paths.` },
