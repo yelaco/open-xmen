@@ -21,20 +21,36 @@ export function globalOpenCodeConfigDir() {
   return path.join(configHome, "opencode");
 }
 
-// Persists the model preset selection so the plugin can pick the slot→model mapping at load.
-export function writeOpenXmenPreset(
+// Persists open-xmen settings (model preset + playwright_mcp toggle) so the plugin can read
+// them at load. Merges the patch into any existing open-xmen.json so independent runs don't
+// clobber each other's keys.
+export function writeOpenXmenConfig(
   globalConfigDir: string,
-  selection: { providers: string[]; focus: string },
+  patch: { providers?: string[]; focus?: string; mcp_servers?: string[] },
   opts: { dryRun: boolean; planned: string[] },
 ) {
   const destination = path.join(globalConfigDir, "open-xmen.json");
-  const content = `${JSON.stringify({ providers: selection.providers, focus: selection.focus }, null, 2)}\n`;
+  let current: JsonObject = {};
+  if (existsSync(destination)) {
+    try {
+      const parsed = JSON.parse(readFileSync(destination, "utf8"));
+      if (isRecord(parsed)) current = parsed;
+    } catch {
+      // ignore malformed file; we overwrite with a clean merge
+    }
+  }
+  const next: JsonObject = { ...current };
+  if (patch.providers !== undefined) next.providers = patch.providers;
+  if (patch.focus !== undefined) next.focus = patch.focus;
+  if (patch.mcp_servers !== undefined) next.mcp_servers = patch.mcp_servers;
+  const summary = Object.entries(patch).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${Array.isArray(v) ? v.join("+") : v}`).join(", ");
+
   if (opts.dryRun) {
-    opts.planned.push(`${existsSync(destination) ? "update" : "write"} ${destination} (providers=${selection.providers.join("+")}, focus=${selection.focus})`);
+    opts.planned.push(`${existsSync(destination) ? "update" : "write"} ${destination} (${summary})`);
     return;
   }
   mkdirSync(path.dirname(destination), { recursive: true });
-  writeFileSync(destination, content, "utf8");
+  writeFileSync(destination, `${JSON.stringify(next, null, 2)}\n`, "utf8");
 }
 
 export function updateOpencodeConfig(target: string, opts: UpdateOpenCodeConfigOptions) {

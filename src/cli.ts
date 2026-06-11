@@ -3,10 +3,10 @@ import { mkdirSync } from "node:fs";
 import readline from "node:readline";
 import { createInterface } from "node:readline/promises";
 import path from "node:path";
-import { CEREBRO_FOCUSES, CEREBRO_PROVIDERS, modelSlots } from "./config/models.js";
+import { CEREBRO_FOCUSES, CEREBRO_PROVIDERS, OPTIONAL_MCP_SERVERS, modelSlots } from "./config/models.js";
 import type { CerebroFocus, CerebroProvider } from "./config/models.js";
 import { installSkills } from "./cli/runtime.js";
-import { globalOpenCodeConfigDir, updateOpencodeConfig, warmOpenCodePluginCache, writeOpenXmenPreset } from "./cli/config.js";
+import { globalOpenCodeConfigDir, updateOpencodeConfig, warmOpenCodePluginCache, writeOpenXmenConfig } from "./cli/config.js";
 import { runOpenCodeDoctor } from "./cli/doctor.js";
 import { fileURLToPath } from "node:url";
 
@@ -51,6 +51,7 @@ Install options:
   -g, --global           Install into OpenCode user config (default)
   --provider <list>      Model subscription(s) you have, comma-separated (e.g. openai,anthropic) or "all"
   --focus <name>         Model focus preset: performance | balance | cost
+  --mcp <list>           Optional MCP servers to enable, comma-separated (playwright,semble), "all", or "none"
   --dry-run              Print planned writes without changing files
   --no-deps              Skip OpenCode plugin cache warm-up
   -h, --help             Show this help message
@@ -98,7 +99,7 @@ async function install(args: string[]) {
 
   const unknown = args.find((arg) => {
     if (!arg.startsWith("-")) return false;
-    return !["--dir", "--provider", "--focus", "--dry-run", "--global", "-g", "--no-deps"].includes(arg);
+    return !["--dir", "--provider", "--focus", "--mcp", "--dry-run", "--global", "-g", "--no-deps"].includes(arg);
   });
   if (unknown) {
     console.error(`Unknown install option: ${unknown}`);
@@ -127,6 +128,12 @@ async function install(args: string[]) {
     console.error(`--focus must be one of: ${CEREBRO_FOCUSES.join(", ")}`);
     return 1;
   }
+  const mcpArg = valueAfter(args, "--mcp");
+  const mcpServers = args.includes("--mcp") ? parseMcpArg(mcpArg) : undefined;
+  if (args.includes("--mcp") && mcpServers === undefined) {
+    console.error(`--mcp must be a comma-separated list of: ${Object.keys(OPTIONAL_MCP_SERVERS).join(", ")} (or "all"/"none")`);
+    return 1;
+  }
 
   const userConfigInstall = !args.includes("--dir");
   const globalConfigDir = globalOpenCodeConfigDir();
@@ -139,12 +146,14 @@ async function install(args: string[]) {
   };
   const planned: string[] = [];
 
-  // Resolve the model preset: flags win; otherwise prompt on an interactive terminal; otherwise leave unchanged.
+  // Resolve the model preset and optional MCP servers: flags win; otherwise prompt on an
+  // interactive terminal; otherwise leave unchanged.
   const selection = await resolvePresetSelection(
     providers,
     isFocus(focusArg) ? focusArg : undefined,
     options.dryRun,
   );
+  const resolvedMcp = await resolveMcpServers(mcpServers, options.dryRun);
 
   console.log(`Open X-Men ${options.dryRun ? "dry run" : "install"}`);
   console.log(`${options.global ? "OpenCode user config" : "Target"}: ${options.target}`);
@@ -162,7 +171,10 @@ async function install(args: string[]) {
   // Skills are user-global so OpenCode can discover them regardless of where the plugin entry lives.
   const skillCount = installSkills(globalConfigDir, { dryRun: options.dryRun, planned });
 
-  if (selection) writeOpenXmenPreset(globalConfigDir, selection, { dryRun: options.dryRun, planned });
+  const patch: { providers?: CerebroProvider[]; focus?: CerebroFocus; mcp_servers?: string[] } = {};
+  if (selection) { patch.providers = selection.providers; patch.focus = selection.focus; }
+  if (resolvedMcp !== undefined) patch.mcp_servers = resolvedMcp;
+  if (Object.keys(patch).length > 0) writeOpenXmenConfig(globalConfigDir, patch, { dryRun: options.dryRun, planned });
 
   if (!options.dryRun && !options.skipDeps) warmOpenCodePluginCache(packageRoot());
 
@@ -180,6 +192,7 @@ async function install(args: string[]) {
   console.log("Commands and agents are provided by the plugin; no .opencode/ or .cerebro/ files were written.");
   console.log(`Installed ${skillCount} skill(s) into ${path.join(globalConfigDir, "skills")}.`);
   if (selection) console.log(`Model preset: ${selection.providers.join(" + ")} / ${selection.focus} (best model per agent across your subscription).`);
+  if (resolvedMcp !== undefined) console.log(`MCP servers: ${resolvedMcp.length ? resolvedMcp.join(", ") : "none"}.`);
   console.log("Next: restart OpenCode, then use `/cerebro-index`, `/cerebro-plan`, or `/cerebro-ultrawork`.");
   return 0;
 }
@@ -275,6 +288,43 @@ function focusChoices(): SelectChoice[] {
     { value: "balance", label: "Balance", hint: "quality where it matters, cost-aware on high-volume" },
     { value: "cost", label: "Cost", hint: "cheapest acceptable per role" },
   ];
+}
+
+function mcpChoices(): SelectChoice[] {
+  return Object.entries(OPTIONAL_MCP_SERVERS).map(([value, def]) => ({
+    value,
+    label: `${value} — ${def.description}`,
+    hint: `needs ${def.requires} · ${def.usedBy}`,
+  }));
+}
+
+// Parses --mcp: comma-separated server ids, "all", or "none" (empty selection). Returns the
+// list, or undefined if any token is unknown.
+function parseMcpArg(value: string | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "none" || trimmed === "") return [];
+  if (trimmed === "all") return Object.keys(OPTIONAL_MCP_SERVERS);
+  const out: string[] = [];
+  for (const raw of value.split(",")) {
+    const token = raw.trim().toLowerCase();
+    if (!token) continue;
+    if (!(token in OPTIONAL_MCP_SERVERS)) return undefined;
+    if (!out.includes(token)) out.push(token);
+  }
+  return out;
+}
+
+// Flag wins; otherwise multi-select on an interactive terminal; otherwise leave unchanged.
+async function resolveMcpServers(fromFlag: string[] | undefined, dryRun: boolean): Promise<string[] | undefined> {
+  if (fromFlag !== undefined) return fromFlag;
+  if (!canInteractiveSelect() || dryRun) return undefined;
+  const picked = await interactiveSelect({
+    title: "Enable optional MCP servers? (extra tools for agents — installs on demand)",
+    multiple: true,
+    choices: mcpChoices(),
+  });
+  return picked === undefined ? undefined : picked;
 }
 
 function canInteractiveSelect(): boolean {

@@ -167,6 +167,25 @@ export function presetFilePath(configDir = openXmenConfigDir()): string | undefi
   return configDir ? path.join(configDir, "open-xmen.json") : undefined;
 }
 
+let cachedRawConfig: Record<string, unknown> | null | undefined;
+
+// Reads ~/.config/opencode/open-xmen.json once (cached). Returns the parsed object or null.
+function readOpenXmenConfigFile(): Record<string, unknown> | null {
+  if (cachedRawConfig !== undefined) return cachedRawConfig;
+  const file = presetFilePath();
+  if (file && existsSync(file)) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8"));
+      cachedRawConfig = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      cachedRawConfig = null;
+    }
+  } else {
+    cachedRawConfig = null;
+  }
+  return cachedRawConfig;
+}
+
 let cachedSelection: PresetSelection | null | undefined;
 
 // Env (OPEN_XMEN_PROVIDERS/OPEN_XMEN_FOCUS) wins over the config file; default focus is "balance".
@@ -178,26 +197,68 @@ export function loadPresetSelection(): PresetSelection | null {
     cachedSelection = { providers: envProviders, focus: isFocus(envFocus) ? envFocus : "balance" };
     return cachedSelection;
   }
-  const file = presetFilePath();
-  if (file && existsSync(file)) {
-    try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-      const providers = parseProviders(parsed.providers ?? parsed.provider);
-      if (providers.length > 0) {
-        cachedSelection = { providers, focus: isFocus(parsed.focus) ? parsed.focus : "balance" };
-        return cachedSelection;
-      }
-    } catch {
-      // ignore malformed preset file; fall through to defaults
+  const raw = readOpenXmenConfigFile();
+  if (raw) {
+    const providers = parseProviders(raw.providers ?? raw.provider);
+    if (providers.length > 0) {
+      cachedSelection = { providers, focus: isFocus(raw.focus) ? raw.focus : "balance" };
+      return cachedSelection;
     }
   }
   cachedSelection = null;
   return cachedSelection;
 }
 
-/** Test/CLI hook to reset the cached selection after writing the preset file. */
+// Optional MCP servers the installer can register into OpenCode config. Extensible — add an
+// entry here (and the plugin registers it when enabled). `requires` is informational for the
+// install prompt (the runtime that must be available to launch it).
+export const OPTIONAL_MCP_SERVERS: Record<string, { command: string[]; description: string; requires: string; usedBy: string }> = {
+  playwright: {
+    command: ["npx", "@playwright/mcp@latest"],
+    description: "Browser automation & UI verification",
+    requires: "npx",
+    usedBy: "opx-playwright skill (Cyclops audit gate)",
+  },
+  semble: {
+    command: ["uvx", "--from", "semble[mcp]", "semble"],
+    description: "Fast code search — ~98% fewer tokens than grep+read",
+    requires: "uvx (uv)",
+    usedBy: "Nightcrawler",
+  },
+};
+
+export type OptionalMcpServer = keyof typeof OPTIONAL_MCP_SERVERS;
+
+function isKnownMcpServer(name: string): name is OptionalMcpServer {
+  return Object.prototype.hasOwnProperty.call(OPTIONAL_MCP_SERVERS, name);
+}
+
+// Optional MCP server ids the user enabled (open-xmen.json `mcp_servers`, or OPEN_XMEN_MCP_SERVERS
+// env as a comma list / "all"). Filtered to known servers and deduped.
+export function enabledMcpServers(): OptionalMcpServer[] {
+  const all = Object.keys(OPTIONAL_MCP_SERVERS) as OptionalMcpServer[];
+  const env = process.env.OPEN_XMEN_MCP_SERVERS;
+  let raw: unknown[];
+  if (env !== undefined) {
+    if (env.trim().toLowerCase() === "all") return all;
+    raw = env.split(",");
+  } else {
+    const file = readOpenXmenConfigFile();
+    raw = Array.isArray(file?.mcp_servers) ? (file!.mcp_servers as unknown[]) : [];
+  }
+  const out: OptionalMcpServer[] = [];
+  for (const entry of raw) {
+    const name = typeof entry === "string" ? entry.trim().toLowerCase() : "";
+    if (name === "all") return all;
+    if (isKnownMcpServer(name) && !out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+/** Test/CLI hook to reset the cached config after writing open-xmen.json. */
 export function resetPresetCache() {
   cachedSelection = undefined;
+  cachedRawConfig = undefined;
 }
 
 // Ranked preference for a slot, filtered to the user's owned providers (best survivor first).

@@ -177,17 +177,24 @@ function verifyFreshInstall(tarballPath: string) {
     verifyResolvedOpenCodeRuntime(defaultProjectDir, isolatedOpenCodeEnv);
     run('node', [cliPath, 'doctor', '--dir', defaultProjectDir], { cwd: packageDir, env: isolatedOpenCodeEnv });
 
-    console.log('Running model preset smoke (anthropic / performance)...');
-    run('node', [cliPath, 'install', '--provider', 'anthropic', '--focus', 'performance', '--no-deps'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv });
+    console.log('Running model preset + MCP smoke (anthropic / performance / semble)...');
+    run('node', [cliPath, 'install', '--provider', 'anthropic', '--focus', 'performance', '--mcp', 'semble', '--no-deps'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv });
     const presetFile = path.join(opencodeConfigDir, 'open-xmen.json');
     if (!existsSync(presetFile)) fail('Preset install did not write open-xmen.json');
     const preset = JSON.parse(readFileSync(presetFile, 'utf8'));
     if (!Array.isArray(preset.providers) || !preset.providers.includes('anthropic') || preset.focus !== 'performance') {
       fail(`open-xmen.json preset content incorrect: ${JSON.stringify(preset)}`);
     }
+    if (!Array.isArray(preset.mcp_servers) || !preset.mcp_servers.includes('semble')) {
+      fail(`open-xmen.json mcp_servers incorrect: ${JSON.stringify(preset)}`);
+    }
     const modelsOut = run('node', [cliPath, 'models'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv });
     if (!modelsOut.includes('anthropic/claude-opus-4-8')) fail(`models did not reflect the anthropic preset:\n${modelsOut}`);
     if (modelsOut.includes('"workers": "openai')) fail('anthropic-only preset should not select an OpenAI worker model');
+    const resolvedWithMcp = JSON.parse(run('opencode', ['debug', 'config'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv }));
+    if (!isRecord(resolvedWithMcp.mcp) || !isRecord((resolvedWithMcp.mcp as Record<string, JsonValue>).semble)) {
+      fail('enabled semble MCP server was not registered in the resolved OpenCode config');
+    }
 
     console.log('Running installed CLI plugin-only smoke install...');
     run('node', [cliPath, 'install', '--dir', projectDir, '--no-deps'], { cwd: packageDir });

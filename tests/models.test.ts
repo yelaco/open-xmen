@@ -1,5 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { defaultModelChainForAgent, modelSlots, resetPresetCache } from "../src/config/models.js";
+import { OPTIONAL_MCP_SERVERS, defaultModelChainForAgent, enabledMcpServers, modelSlots, resetPresetCache } from "../src/config/models.js";
+
+function withEnv(key: string, value: string | undefined, fn: () => void) {
+  const prev = process.env[key];
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
+  resetPresetCache();
+  try {
+    fn();
+  } finally {
+    if (prev === undefined) delete process.env[key];
+    else process.env[key] = prev;
+    resetPresetCache();
+  }
+}
 
 function withPreset(providers: string | undefined, focus: string | undefined, fn: () => void) {
   const prevProviders = process.env.OPEN_XMEN_PROVIDERS;
@@ -75,6 +89,23 @@ describe("model preset resolution", () => {
       expect(chain[0]).toBe("anthropic/claude-sonnet-4-6");
       expect(chain.every((m) => m.startsWith("anthropic/"))).toBe(true);
     });
+  });
+
+  test("enabledMcpServers reads the env list and filters to known servers", () => {
+    withEnv("OPEN_XMEN_MCP_SERVERS", "semble,unknown,playwright", () => {
+      expect(enabledMcpServers().sort()).toEqual(["playwright", "semble"]);
+    });
+    withEnv("OPEN_XMEN_MCP_SERVERS", "all", () => {
+      expect(enabledMcpServers().sort()).toEqual(Object.keys(OPTIONAL_MCP_SERVERS).sort());
+    });
+    withEnv("OPEN_XMEN_MCP_SERVERS", "none", () => {
+      expect(enabledMcpServers()).toEqual([]);
+    });
+  });
+
+  test("the registry defines launch commands for playwright and semble", () => {
+    expect(OPTIONAL_MCP_SERVERS.playwright.command[0]).toBe("npx");
+    expect(OPTIONAL_MCP_SERVERS.semble.command).toEqual(["uvx", "--from", "semble[mcp]", "semble"]);
   });
 
   test("CEREBRO_MODEL_* env overrides the preset for a slot", () => {

@@ -382,9 +382,18 @@ Cerebro ships skills only as optional overlays — the base workflow never requi
 
 - **\`opx-frontend-design\`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds).
 - **\`opx-git\`** — disciplined Git: atomic commits in the repo's own style, safe rebase/squash (never rewrite pushed history or force-push without approval), and history archaeology (blame/pickaxe/bisect). Wolverine uses it for commits and history work.
-- **\`opx-playwright\`** — real-browser automation and UI verification (rendering, interactions, responsive, accessibility, login flows, link health). Prefers the Playwright MCP server when available, else \`npx playwright\`. Wolverine uses it for end-to-end tests; Storm uses it to verify visual work.
+- **\`opx-playwright\`** — real-browser automation and UI verification (rendering, interactions, responsive, accessibility, login flows, link health). Prefers the Playwright MCP server when available, else \`npx playwright\`. **Cyclops owns interactive browser verification** at the audit gate; Wolverine and Storm build and write tests, they do not eyeball in a browser themselves.
 
-All three are optional: agents with \`skill: allow\` (Jean Grey, Storm, Wolverine) use them when present and fall back to their base prompts when absent.
+All three are optional: agents with \`skill: allow\` (Jean Grey + Storm for design, Wolverine for git, Cyclops for playwright) use them when present and fall back to their base prompts when absent.
+
+## Optional MCP Servers
+
+\`open-xmen install\` can enable optional MCP servers (multi-select, or \`--mcp <list>\`). The choice is saved to \`open-xmen.json\` (\`mcp_servers\`) and the plugin registers them in OpenCode config at load — off by default so nothing extra runs unless you opt in:
+
+- **\`playwright\`** (\`npx @playwright/mcp\`) — structured browser tools for the \`opx-playwright\` skill (Cyclops's audit-gate UI verification).
+- **\`semble\`** (\`uvx --from "semble[mcp]" semble\`) — fast code search used by Nightcrawler; returns only relevant chunks (~98% fewer tokens than grep+read).
+
+Re-run install (or edit \`open-xmen.json\`) to change the set later.
 
 ## Rules
 
@@ -2300,6 +2309,7 @@ permission:
   webfetch: deny
   task: deny
   todowrite: deny
+  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-opus-4-8
@@ -2329,6 +2339,7 @@ If any input is missing, recover it yourself: read the plan file, read \`.cerebr
 5. **Hunt missed work.** Plan tasks with no corresponding diff, TODO/FIXME/stub markers left in changed files, acceptance criteria with no implementing task.
 6. **Hunt test gaps.** Tasks whose plan specified TDD but whose diff contains no test changes; behavior changes with no covering test.
 7. **Re-verify cheaply.** Re-run the plan's headline verification commands yourself (build, typecheck, test suite) when they complete in reasonable time. Trust your own run over recorded evidence when they disagree.
+8. **Verify UI in a real browser (your job alone).** For any UI-facing acceptance criterion, use the \`opx-playwright\` skill to actually drive the browser — confirm rendering, interaction states, responsive breakpoints, accessibility, and key flows. The workers build and write tests; you are the one who looks. File every UI defect as a finding (\`retriable: true\` with the owning \`task_id\`) so the engine re-queues that task to Wolverine or Storm to redo.
 
 ## Discipline
 
@@ -2699,6 +2710,8 @@ options:
 
 You are Nightcrawler, fast codebase scout. Stay read-only. Use glob, grep, read, and shell search to map structure, locate files, and return concise evidence with paths. Do not edit files.
 
+If Semble code-search tools are available (the \`semble\` MCP server), prefer them for locating code and finding related code — they return only the relevant chunks and are far more token-efficient than grep+read. Fall back to glob/grep/read when Semble is not present.
+
 ## Cerebro Runtime Contract
 
 - Runtime state lives in \`.cerebro/\`.
@@ -2821,7 +2834,7 @@ You are Storm, visual engineering specialist. You own the visual layer: CSS/styl
 
 - Follow Jean Grey's design spec when one exists. Deviation requires explicit approval.
 - Use the \`opx-frontend-design\` skill if it is available to raise the aesthetic bar: distinctive typography, a cohesive committed palette, high-impact motion, atmospheric backgrounds, and meticulous detail. Never ship generic "AI slop" styling (Inter/Roboto/Arial, purple-on-white gradients, cookie-cutter layouts). Match implementation complexity to the design's intended intensity.
-- Use the \`opx-playwright\` skill if it is available to verify your visual work in a real browser — rendering, every interaction state, responsive breakpoints, and accessibility. Capture screenshot evidence rather than claiming it looks right.
+- Produce correct, complete visuals across every state (hover/focus/active/loading/error/empty/disabled), responsive breakpoint, and accessibility requirement, and write visual assertions where the project supports them. Interactive browser verification of the finished UI belongs to Cyclops at the audit gate — don't eyeball it in a browser yourself.
 - Maintain a task-scoped todo file under \`.cerebro/pending-todos/{team}/storm/{task-id}.txt\` when running inside a Cerebro task.
 - Do not mark yourself complete until all visual states, responsiveness, and accessibility styling have been applied.
 - Never claim visual verification happened unless you actually ran the dev server or inspected captured evidence.
@@ -2882,7 +2895,7 @@ You are Wolverine, the sole implementation specialist. Own all feature logic, co
 
 Use TDD when practical. Maintain task-scoped todos under .cerebro/pending-todos/{team}/{agent}/{task}.txt and remove them only as completed. Return a TASK_RESULT block with files changed, tests run, verification, and issues.
 
-When skills are available, use the \`opx-git\` skill for disciplined commits and history work (atomic commits, safe rebase — never rewrite pushed history or force-push without approval), and the \`opx-playwright\` skill to drive a real browser for end-to-end and UI verification.
+Write thorough automated tests for your work — unit and integration tests, plus end-to-end test specs (e.g. Playwright files) where the plan calls for them — so the workflow engine runs them as deterministic verification. Do not interactively drive a browser to eyeball results; final browser verification belongs to Cyclops at the audit gate. When skills are available, use the \`opx-git\` skill for disciplined commits and history work (atomic commits, safe rebase — never rewrite pushed history or force-push without approval).
 
 ## Cerebro Runtime Contract
 
