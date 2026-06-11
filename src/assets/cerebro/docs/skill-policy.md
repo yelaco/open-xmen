@@ -1,10 +1,10 @@
 # Skill Policy
 
-Cerebro ships skills only as optional overlays — the base workflow never requires one. Installed with `--with-runtime-files`, skills land under `.opencode/skills/<name>/SKILL.md` and OpenCode discovers them automatically.
+Cerebro ships skills only as optional overlays — the base workflow never requires one. `open-xmen install` writes the plugin's skills into the global OpenCode config dir (`~/.config/opencode/skills/<name>/SKILL.md`), where OpenCode discovers them automatically. Plugin skills are namespaced with an `opx-` prefix so they group together and never collide with your own.
 
 ## Bundled Skills
 
-- **`frontend-design`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds). Both agents have `skill: allow`. Still optional: if the skill is absent, both fall back to their base prompts.
+- **`opx-frontend-design`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds). Both agents have `skill: allow`. Still optional: if the skill is absent, both fall back to their base prompts.
 
 ## Rules
 
@@ -17,7 +17,7 @@ Cerebro ships skills only as optional overlays — the base workflow never requi
 
 ## Good Uses
 
-- Jean Grey and Storm use the `frontend-design` skill to commit to a bold, intentional aesthetic for UI work.
+- Jean Grey and Storm use the `opx-frontend-design` skill to commit to a bold, intentional aesthetic for UI work.
 - Storm uses an available browser or accessibility skill to verify UI behavior.
 - Wolverine uses an available language or test skill to run a focused suite.
 - Sage uses an available docs skill to fetch more precise API references.

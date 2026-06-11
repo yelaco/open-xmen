@@ -84,7 +84,7 @@ flowchart TB
 
 ## Package Updates
 
-Open X-Men is package-managed. To refresh the plugin package/config cache: `bunx open-xmen@latest install`. Use `install --with-runtime-files --reset` only for legacy managed runtime files.
+Open X-Men is package-managed and plugin-only. To refresh the plugin package/config cache and re-install the global skills: `bunx open-xmen@latest install`. No project runtime files are written.
 
 ## Skills
 

@@ -256,7 +256,7 @@ flowchart TB
 
 ## Package Updates
 
-Open X-Men is package-managed. To refresh the plugin package/config cache: \`bunx open-xmen@latest install\`. Use \`install --with-runtime-files --reset\` only for legacy managed runtime files.
+Open X-Men is package-managed and plugin-only. To refresh the plugin package/config cache and re-install the global skills: \`bunx open-xmen@latest install\`. No project runtime files are written.
 
 ## Skills
 
@@ -363,7 +363,7 @@ Legacy \`.claude/\` files may exist as migration source or compatibility materia
 | Planning | \`/cerebro-plan [task]\` | Requirements are complex, ambiguous, high-impact, or need approval. |
 | Execution | \`/cerebro-start-work\` | A plan exists and should be executed or resumed. |
 
-Package updates are npm-managed. Re-run \`bunx open-xmen@latest install\` to refresh the plugin config/cache without writing project runtime files. Use \`install --with-runtime-files --reset\` only when you intentionally want to refresh legacy managed \`.opencode/\`, \`.cerebro/\`, and \`AGENTS.md\` files.
+Package updates are npm-managed. Open X-Men is plugin-only: re-run \`bunx open-xmen@latest install\` to refresh the plugin config/cache and re-install the global skills. No \`.opencode/\`, \`.cerebro/\`, or \`AGENTS.md\` files are written into your project.
 
 When \`/cerebro-ultrawork\` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and the workflow engine executes the plan deterministically — parallel dependency frontiers, shell verification, bounded retries — with Cyclops auditing the final result.
 
@@ -376,11 +376,11 @@ When \`/cerebro-ultrawork\` receives an unclear full-product prompt, it asks onl
 ` },
   { path: ".cerebro/docs/skill-policy.md", content: `# Skill Policy
 
-Cerebro ships skills only as optional overlays — the base workflow never requires one. Installed with \`--with-runtime-files\`, skills land under \`.opencode/skills/<name>/SKILL.md\` and OpenCode discovers them automatically.
+Cerebro ships skills only as optional overlays — the base workflow never requires one. \`open-xmen install\` writes the plugin's skills into the global OpenCode config dir (\`~/.config/opencode/skills/<name>/SKILL.md\`), where OpenCode discovers them automatically. Plugin skills are namespaced with an \`opx-\` prefix so they group together and never collide with your own.
 
 ## Bundled Skills
 
-- **\`frontend-design\`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds). Both agents have \`skill: allow\`. Still optional: if the skill is absent, both fall back to their base prompts.
+- **\`opx-frontend-design\`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds). Both agents have \`skill: allow\`. Still optional: if the skill is absent, both fall back to their base prompts.
 
 ## Rules
 
@@ -393,7 +393,7 @@ Cerebro ships skills only as optional overlays — the base workflow never requi
 
 ## Good Uses
 
-- Jean Grey and Storm use the \`frontend-design\` skill to commit to a bold, intentional aesthetic for UI work.
+- Jean Grey and Storm use the \`opx-frontend-design\` skill to commit to a bold, intentional aesthetic for UI work.
 - Storm uses an available browser or accessibility skill to verify UI behavior.
 - Wolverine uses an available language or test skill to run a focused suite.
 - Sage uses an available docs skill to fetch more precise API references.
@@ -2564,7 +2564,7 @@ options:
 
 You are Jean Grey, design strategist. Before Storm implements the visual layer, define it clearly: component specs, UX flows, interaction patterns, and design system decisions. Write all design artifacts under .cerebro/notepads/design/. Do not edit source code.
 
-When shaping the aesthetic direction for any UI work, use the \`frontend-design\` skill if it is available — commit to a bold, intentional aesthetic and avoid generic "AI slop" defaults (Inter/Roboto/Arial, purple-on-white gradients, predictable layouts). Bake the skill's typography, color, motion, and composition guidance into your DESIGN_SPEC so Storm can execute it.
+When shaping the aesthetic direction for any UI work, use the \`opx-frontend-design\` skill if it is available — commit to a bold, intentional aesthetic and avoid generic "AI slop" defaults (Inter/Roboto/Arial, purple-on-white gradients, predictable layouts). Bake the skill's typography, color, motion, and composition guidance into your DESIGN_SPEC so Storm can execute it.
 
 ## Output Contracts
 
@@ -2810,7 +2810,7 @@ You are Storm, visual engineering specialist. You own the visual layer: CSS/styl
 ## Storm Guardrails
 
 - Follow Jean Grey's design spec when one exists. Deviation requires explicit approval.
-- Use the \`frontend-design\` skill if it is available to raise the aesthetic bar: distinctive typography, a cohesive committed palette, high-impact motion, atmospheric backgrounds, and meticulous detail. Never ship generic "AI slop" styling (Inter/Roboto/Arial, purple-on-white gradients, cookie-cutter layouts). Match implementation complexity to the design's intended intensity.
+- Use the \`opx-frontend-design\` skill if it is available to raise the aesthetic bar: distinctive typography, a cohesive committed palette, high-impact motion, atmospheric backgrounds, and meticulous detail. Never ship generic "AI slop" styling (Inter/Roboto/Arial, purple-on-white gradients, cookie-cutter layouts). Match implementation complexity to the design's intended intensity.
 - Maintain a task-scoped todo file under \`.cerebro/pending-todos/{team}/storm/{task-id}.txt\` when running inside a Cerebro task.
 - Do not mark yourself complete until all visual states, responsiveness, and accessibility styling have been applied.
 - Never claim visual verification happened unless you actually ran the dev server or inspected captured evidence.
@@ -2980,8 +2980,22 @@ The user has given one prompt and expects a complete result with no further ques
 12. Call \`cerebro_verify_pending\`; final-report only when todos are clear or explicitly blocked.
 
 Final report: assumptions made, files changed, tests/verification, audit verdict, customer verdict (if run), unresolved issues, workflow problem list path, \`.cerebro\` run paths.` },
-  { path: ".opencode/skills/frontend-design/SKILL.md", content: `---
-name: frontend-design
+  { path: "AGENTS.md", content: `# Cerebro OpenCode Runtime
+
+This project uses the Cerebro workflow on OpenCode.
+
+- Primary runtime state lives under \`.cerebro/\`.
+- Use OpenCode commands \`/cerebro-index\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, and \`/cerebro-ultrawork\` for non-trivial work.
+- Preserve Cerebro role names: Legion, Cypher, Professor X, Cyclops, Wolverine, Storm, Forge, Nightcrawler, Sage, Beast, and Emma Frost.
+- Plan execution runs through the deterministic \`cerebro_execute_workflow\` engine; agents never hand-roll dispatch loops. Cyclops audits the finished run.
+- OpenCode does not provide Claude Code native team APIs; use Cerebro custom tools and OpenCode subagents/child sessions for coordination.
+- Never read \`.env\`, \`.env.*\`, secret, or credential files unless the user explicitly authorizes it for the current task.
+- Do not write generated build output (\`dist/\`, \`build/\`, \`target/\`) unless the task explicitly targets those directories.
+
+When handling a Cerebro command, read \`.cerebro/cerebro-identity.md\` and \`.cerebro/opencode/model-routing.md\` first if they are not already in context.
+` },
+  { path: "skills/opx-frontend-design/SKILL.md", content: `---
+name: opx-frontend-design
 description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, or applications. Generates creative, polished code that avoids generic AI aesthetics.
 ---
 
@@ -3021,19 +3035,5 @@ Interpret creatively and make unexpected choices that feel genuinely designed fo
 **IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
 
 Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
-` },
-  { path: "AGENTS.md", content: `# Cerebro OpenCode Runtime
-
-This project uses the Cerebro workflow on OpenCode.
-
-- Primary runtime state lives under \`.cerebro/\`.
-- Use OpenCode commands \`/cerebro-index\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, and \`/cerebro-ultrawork\` for non-trivial work.
-- Preserve Cerebro role names: Legion, Cypher, Professor X, Cyclops, Wolverine, Storm, Forge, Nightcrawler, Sage, Beast, and Emma Frost.
-- Plan execution runs through the deterministic \`cerebro_execute_workflow\` engine; agents never hand-roll dispatch loops. Cyclops audits the finished run.
-- OpenCode does not provide Claude Code native team APIs; use Cerebro custom tools and OpenCode subagents/child sessions for coordination.
-- Never read \`.env\`, \`.env.*\`, secret, or credential files unless the user explicitly authorizes it for the current task.
-- Do not write generated build output (\`dist/\`, \`build/\`, \`target/\`) unless the task explicitly targets those directories.
-
-When handling a Cerebro command, read \`.cerebro/cerebro-identity.md\` and \`.cerebro/opencode/model-routing.md\` first if they are not already in context.
 ` },
 ];

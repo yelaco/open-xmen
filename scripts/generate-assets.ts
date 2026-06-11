@@ -3,7 +3,7 @@
  *
  * Sources:
  *   - src/assets/cerebro/  — Cerebro runtime content (.cerebro/ files); real files, real extensions
- *   - src/assets/skills/   — OpenCode skills (.opencode/skills/<name>/SKILL.md); real files
+ *   - src/assets/skills/   — OpenCode skills (skills/<name>/SKILL.md); installed to the global OpenCode config dir
  *   - src/agents/          — OpenCode agent markdown (via factories)
  *   - src/commands/        — OpenCode command markdown (via definitions)
  *   - src/assets/AGENTS.md — Repository-level operating instructions
@@ -60,9 +60,10 @@ function walkAssets(rootDir: string, destPrefix: string): Asset[] {
   return assets;
 }
 
-// .cerebro/ runtime content and .opencode/skills/ both come from real files on disk.
+// .cerebro/ runtime content and skills/ both come from real files on disk.
+// Skills install to the global OpenCode config dir (<configDir>/skills/<name>/SKILL.md).
 const walkCerebroAssets = () => walkAssets(cerebroAssetsDir, ".cerebro");
-const walkSkillAssets = () => walkAssets(skillsAssetsDir, ".opencode/skills");
+const walkSkillAssets = () => walkAssets(skillsAssetsDir, "skills");
 
 // ─── Agent markdown from factories ───────────────────────────────────────────
 
@@ -117,7 +118,7 @@ function main() {
     ...buildAgentAssets(),
     ...buildCommandAssets(),
 
-    // .opencode/skills/ — optional skill overlays from real files
+    // skills/ — optional skill overlays installed into the global OpenCode config dir
     ...walkSkillAssets(),
 
     // Repository-level instructions

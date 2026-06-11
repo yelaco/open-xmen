@@ -10,7 +10,8 @@ The rebirth release: orchestration moves out of prompts and into the plugin runt
 - Cyclops audit wave: when all tasks are done and verified, the engine dispatches Cyclops once as a final quality gate. Cyclops rules `AUDIT_PASSED` or `AUDIT_FAILED` with a structured JSON findings array; retriable findings re-queue their tasks for one more engine pass.
 - `files` parameter on `cerebro_task_create` — declared file scopes drive parallel-batch conflict avoidance.
 - Workers may report a `GOTCHAS:` section in `TASK_RESULT`; the engine harvests it into `.cerebro/notepads/{run_id}/gotchas.md` and forwards it to later workers.
-- Bundled `frontend-design` skill (`.opencode/skills/frontend-design/SKILL.md`, installed with `--with-runtime-files`) for distinctive, non-generic frontend aesthetics. Jean Grey and Storm have `skill: allow` and reference it for UI work; it remains an optional overlay.
+- Bundled `opx-frontend-design` skill for distinctive, non-generic frontend aesthetics. `open-xmen install` writes it to the global OpenCode skills dir (`~/.config/opencode/skills/opx-frontend-design/SKILL.md`) so OpenCode discovers it; plugin skills use an `opx-` namespace prefix. Jean Grey and Storm have `skill: allow` and reference it for UI work; it remains an optional overlay.
+- Removed the `--with-runtime-files` install path. Open X-Men is plugin-only: commands and agents register through the plugin, and skills install globally. `.cerebro/` docs/templates/schemas are now repo-internal references, not shipped into projects.
 - `bun test` suite covering the scheduler, router, verifier, result parsers, and engine loop.
 
 ### Changed

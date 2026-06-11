@@ -3,7 +3,6 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runtimeAssetPaths } from '../src/runtime/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -27,16 +26,6 @@ const requiredPackagedFiles = [
 
 const allowedTopLevelFiles = new Set(['package.json', 'README.md']);
 const forbiddenPackagedPathPattern = /(^|\/)\.env(\.|$|\/)|secret|credential|token|private[-_]?key|node_modules|__pycache__|\.pyc$|\.opencode\/|\.cerebro\/|\.claude\/|\.omx\/|\.sisyphus\//i;
-const requiredModelSlots = [
-  ['orchestrator', 'openai/gpt-5.5', 'CEREBRO_MODEL_ORCHESTRATOR'],
-  ['auditor', 'openai/gpt-5.5', 'CEREBRO_MODEL_AUDITOR'],
-  ['planner', 'openai/gpt-5.5', 'CEREBRO_MODEL_PLANNER'],
-  ['design', 'openai/gpt-5.5', 'CEREBRO_MODEL_DESIGN'],
-  ['analyst', 'openai/gpt-5.4', 'CEREBRO_MODEL_ANALYST'],
-  ['workers', 'openai/gpt-5.5', 'CEREBRO_MODEL_WORKERS'],
-  ['fast', 'openai/gpt-5.4-mini-fast', 'CEREBRO_MODEL_FAST'],
-  ['image', 'openai/gpt-image-2', 'CEREBRO_MODEL_IMAGE'],
-];
 const expectedResolvedCommands = ['cerebro-index', 'cerebro-plan', 'cerebro-start-work', 'cerebro-ultrawork'];
 const expectedResolvedAgents = [
   'cerebro',
@@ -181,6 +170,9 @@ function verifyFreshInstall(tarballPath: string) {
     if (existsSync(path.join(defaultProjectDir, 'opencode.jsonc'))) fail('Default install unexpectedly wrote project opencode.jsonc');
     if (existsSync(path.join(defaultProjectDir, '.opencode'))) fail('Default install unexpectedly wrote .opencode/');
     if (existsSync(path.join(defaultProjectDir, '.cerebro'))) fail('Default install unexpectedly wrote .cerebro/');
+    const installedSkill = path.join(opencodeConfigDir, 'skills', 'opx-frontend-design', 'SKILL.md');
+    if (!existsSync(installedSkill)) fail(`Default install did not install the global skill at ${installedSkill}`);
+    if (!readFileSync(installedSkill, 'utf8').includes('name: opx-frontend-design')) fail('Installed skill SKILL.md missing namespaced name frontmatter');
     verifyResolvedOpenCodeRuntime(defaultProjectDir, isolatedOpenCodeEnv);
     run('node', [cliPath, 'doctor', '--dir', defaultProjectDir], { cwd: packageDir, env: isolatedOpenCodeEnv });
 
@@ -195,37 +187,11 @@ function verifyFreshInstall(tarballPath: string) {
     if (existsSync(path.join(projectDir, '.opencode'))) fail('Plugin-only install unexpectedly wrote .opencode/');
     if (existsSync(path.join(projectDir, '.cerebro'))) fail('Plugin-only install unexpectedly wrote .cerebro/');
     if (existsSync(path.join(projectDir, 'AGENTS.md'))) fail('Plugin-only install unexpectedly wrote AGENTS.md');
+    if (!existsSync(path.join(projectDir, 'opencode.jsonc'))) fail('Plugin-only install should write a project opencode.jsonc');
     verifyResolvedOpenCodeRuntime(projectDir, isolatedOpenCodeEnv);
 
-    // Do not run `doctor` for this project-local + --no-deps smoke with a warmed
-    // cache; the default-install doctor path above covers the user-config flow
-    // and the runtime-files doctor path below covers managed project files.
-
-    console.log('Running installed CLI runtime-files smoke install...');
-    const runtimeProjectDir = path.join(tempRoot, 'project-runtime');
-    mkdirSync(runtimeProjectDir, { recursive: true });
-    run('node', [cliPath, 'install', '--dir', runtimeProjectDir, '--with-runtime-files', '--no-deps'], { cwd: packageDir, env: isolatedOpenCodeEnv });
-
-    const runtimeOpencodeConfig = readJsonc(path.join(runtimeProjectDir, 'opencode.jsonc'));
-    if (!isRecord(runtimeOpencodeConfig) || !Array.isArray(runtimeOpencodeConfig.plugin) || !runtimeOpencodeConfig.plugin.includes(expectedPackagePluginEntry)) {
-      fail(`Runtime-files opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
-    }
-    if (runtimeOpencodeConfig.default_agent !== 'cerebro') fail('Runtime-files install should set default_agent to cerebro');
-
-    for (const installedFile of runtimeAssetPaths()) {
-      if (!existsSync(path.join(runtimeProjectDir, installedFile))) {
-        fail(`Smoke install missing ${installedFile}`);
-      }
-    }
-    for (const runtimeDir of ['.cerebro/plans', '.cerebro/notepads', '.cerebro/team-runs', '.cerebro/pending-todos']) {
-      if (!existsSync(path.join(runtimeProjectDir, runtimeDir))) {
-        fail(`Smoke install missing runtime directory ${runtimeDir}`);
-      }
-    }
-    if (existsSync(path.join(runtimeProjectDir, '.opencode/plugins/open-xmen.ts'))) {
-      fail('Smoke install copied repo-local plugin bridge into installed project');
-    }
-    verifyInstalledRuntime(runtimeProjectDir);
+    // No `doctor` here for the project-local + --no-deps smoke with a warmed cache;
+    // the default-install doctor path above covers the user-config flow.
 
     console.log('Running installed plugin config smoke test...');
     run('node', ['--input-type=module', '-e', `
@@ -263,9 +229,6 @@ function verifyFreshInstall(tarballPath: string) {
       if (!output.parts[0].text.includes('Cerebro OpenCode runtime is active.')) throw new Error('Command hook did not prepend Cerebro runtime prelude');
     `], { cwd: packageDir });
 
-    console.log('Running installed doctor for runtime-files install...');
-    run('node', [cliPath, 'doctor', '--dir', runtimeProjectDir], { cwd: packageDir, env: isolatedOpenCodeEnv });
-
     console.log('Running installed global install smoke test...');
     const globalConfigRoot = path.join(tempRoot, 'global-config');
     mkdirSync(globalConfigRoot, { recursive: true });
@@ -281,28 +244,10 @@ function verifyFreshInstall(tarballPath: string) {
       fail(`Global opencode.jsonc does not include package plugin entry ${expectedPackagePluginEntry}`);
     }
     if ('default_agent' in globalConfig) fail('Global install should not force default_agent');
+    const globalSkill = path.join(globalConfigRoot, 'opencode', 'skills', 'opx-frontend-design', 'SKILL.md');
+    if (!existsSync(globalSkill)) fail(`Global install did not install the skill at ${globalSkill}`);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
-  }
-}
-
-function verifyInstalledRuntime(projectDir: string) {
-  const routing = readFileSync(path.join(projectDir, '.cerebro/opencode/model-routing.md'), 'utf8');
-  for (const [slot, model, env] of requiredModelSlots) {
-    if (!routing.includes(`\`${slot}\``)) fail(`Model routing missing slot ${slot}`);
-    if (!routing.includes(model)) fail(`Model routing missing default model ${model}`);
-    if (!routing.includes(env)) fail(`Model routing missing env override ${env}`);
-  }
-
-  const identity = readFileSync(path.join(projectDir, '.cerebro/cerebro-identity.md'), 'utf8');
-  for (const toolName of ['cerebro_agent_task', 'cerebro_collect_result', 'cerebro_dispatch_agent', 'cerebro_execute_workflow']) {
-    if (!identity.includes(toolName)) fail(`Cerebro identity missing tool ${toolName}`);
-  }
-
-  for (const file of ['cerebro.md', 'cyclops.md', 'wolverine.md', 'storm.md']) {
-    const text = readFileSync(path.join(projectDir, '.opencode/agents', file), 'utf8');
-    if (!text.includes('model_fallbacks:')) fail(`${file} missing model_fallbacks`);
-    if (!text.includes('permission:')) fail(`${file} missing permission frontmatter`);
   }
 }
 

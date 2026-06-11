@@ -4,7 +4,6 @@ import path from "node:path";
 
 const PACKAGE_NAME = "open-xmen";
 const PACKAGE_CACHE_TAG = "latest";
-const OPENCODE_INSTRUCTIONS = ["AGENTS.md", ".cerebro/cerebro-identity.md", ".cerebro/opencode/model-routing.md"];
 
 type JsonObject = { [key: string]: JsonValue };
 type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
@@ -13,8 +12,6 @@ export type UpdateOpenCodeConfigOptions = {
   dryRun: boolean;
   planned: string[];
   defaultAgent?: string;
-  includeRuntimeInstructions?: boolean;
-  setCerebroDefaults?: boolean;
 };
 
 export function globalOpenCodeConfigDir() {
@@ -39,14 +36,6 @@ export function updateOpencodeConfig(target: string, opts: UpdateOpenCodeConfigO
   config.plugin = replaceOpenXmenPluginEntries(asArray(config.plugin), getPluginEntry());
   if (opts.defaultAgent) {
     config.default_agent ||= opts.defaultAgent;
-  }
-  if (opts.includeRuntimeInstructions) {
-    config.instructions = appendUnique(asArray(config.instructions), ...OPENCODE_INSTRUCTIONS);
-  }
-  if (opts.setCerebroDefaults) {
-    config.default_agent ??= "cerebro";
-    config.share ??= "disabled";
-    config.permission ??= { edit: "ask", bash: "ask", webfetch: "ask", task: "ask", question: "allow" };
   }
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
@@ -262,14 +251,6 @@ function removeTrailingCommas(text: string) {
     out += ch;
   }
   return out;
-}
-
-function appendUnique<T>(items: T[], ...values: T[]) {
-  const result = [...items];
-  for (const value of values) {
-    if (!result.includes(value)) result.push(value);
-  }
-  return result;
 }
 
 function asArray(value: unknown): JsonValue[] {

@@ -92,17 +92,16 @@ Useful installer flags:
 ```bash
 bunx open-xmen@latest install --global
 bunx open-xmen@latest install --dir /path/to/project
-bunx open-xmen@latest install --with-runtime-files --dir /path/to/project
 bunx open-xmen@latest install --dry-run
-bunx open-xmen@latest install --with-runtime-files --reset
 bunx open-xmen@latest install --no-deps
 ```
 
-- `--global` is the default and installs into the OpenCode user config.
+- `--global` is the default and installs the plugin entry into the OpenCode user config.
 - `--dir /path/to/project` writes only that project's `opencode.jsonc` and sets `default_agent` to `cerebro`.
-- `--with-runtime-files` is legacy/opt-in and writes managed `.opencode/`, `.cerebro/`, and `AGENTS.md` files into the selected project.
-- `--reset` / `--force` only matter with `--with-runtime-files`; they refresh existing managed files.
+- `--dry-run` prints planned writes without changing anything.
 - `--no-deps` skips the cache warm-up/refresh.
+
+Open X-Men is **plugin-only**: commands and agents register through the plugin at load time — no `.opencode/` or `.cerebro/` files are written into your project. The plugin's skills (e.g. `opx-frontend-design`) always install into the global OpenCode config dir (`~/.config/opencode/skills/`), regardless of `--dir`, so OpenCode can discover them.
 
 For local development of this package:
 
@@ -131,16 +130,14 @@ For autonomous best-effort mode:
 ## CLI
 
 ```bash
-open-xmen [install] [--dir <path>] [--dry-run] [--reset] [--force] [--no-deps]
-open-xmen update [--dir <path>] [--dry-run]
+open-xmen [install] [--dir <path>] [--global] [--dry-run] [--no-deps]
 open-xmen doctor [--dir <path>] [--json]
 open-xmen models
 ```
 
 - No subcommand defaults to `install`, matching `bunx open-xmen@latest install` behavior.
-- `update` refreshes all managed runtime and template files to the current package version. Recommended after `bunx open-xmen@latest` fetches a new version.
-- `--dry-run` prints planned writes and does not mutate the target project.
-- `--reset` / `--force` refresh existing managed files; without them, existing files are skipped.
+- Re-running `install` refreshes the OpenCode package cache and re-installs the plugin's global skills to the current package version.
+- `--dry-run` prints planned writes and does not mutate anything.
 - `opencode.jsonc` writes are atomic via `opencode.jsonc.tmp` and create `opencode.jsonc.bak` before replacing an existing config.
 - `doctor --json` returns script-friendly diagnostics.
 
@@ -175,37 +172,17 @@ open-xmen models
 
 ---
 
-## Runtime Files
+## Skills
 
-Runtime files are optional legacy managed files. The package plugin provides commands and agents without them. Use them only if you intentionally want repo-local markdown/runtime assets:
-
-```bash
-bunx open-xmen@latest install --dir /path/to/project --with-runtime-files
-bunx open-xmen@latest install --dir /path/to/project --with-runtime-files --reset
-```
+Open X-Men ships optional skills as an overlay. `install` writes them into the global OpenCode config dir so OpenCode discovers them automatically; they are namespaced with an `opx-` prefix to group together and avoid collisions:
 
 ```text
-.cerebro/
-├── cerebro-identity.md          # OpenCode Cerebro orchestration brain
-├── opencode/model-routing.md    # model slots and routing policy
-├── project-context.md           # repository index from /cerebro-index
-├── plans/                       # approved plans
-├── notepads/                    # customer visions, requirements, drafts, reviews, learnings
-├── team-runs/                   # manifests, task state, mailbox logs, checkpoints, events
-│   ├── *.progress.jsonl          # visible progress milestones and long-running heartbeats
-│   └── *.problems.jsonl          # workflow problem list / improvement backlog
-├── pending-todos/               # worker task todos
-├── boulder.json                 # execution checkpoint
-├── docs/                        # workflow, orchestration, and agent guides
-├── integrations/                # optional integration configs (e.g. semble)
-├── schemas/                     # state schemas (boulder, team-run)
-├── templates/                   # plan/context/run templates
-└── scripts/                     # validators and maintenance helpers
-
-.opencode/
-├── agents/*.md                  # role agent definitions (cerebro, cyclops, wolverine, …)
-└── commands/*.md                # slash command definitions
+~/.config/opencode/skills/
+└── opx-frontend-design/
+    └── SKILL.md   # distinctive, production-grade frontend aesthetics
 ```
+
+Skills are optional: if one is absent, the agents that reference it fall back to their base prompts. `.cerebro/` runtime *state* (plans, team-runs, notepads, pending-todos) is created on demand by the plugin's tools at runtime — it is never installed up front.
 
 ---
 
@@ -214,9 +191,7 @@ bunx open-xmen@latest install --dir /path/to/project --with-runtime-files --rese
 ```bash
 npm run build
 npx tsc -p tsconfig.json --noEmit
-npm run doctor
-python3 .cerebro/scripts/validate-opencode-runtime.py
-python3 .cerebro/scripts/validate-team-runs.py
+npm run test
 npm run verify:release
 ```
 
