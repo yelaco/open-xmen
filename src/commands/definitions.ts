@@ -78,7 +78,7 @@ Use the \`opx-personal-assistant\` skill if available and narrate every phase to
 
 ## Autonomous standard
 
-The user has given one prompt and expects a complete result with no further questions. Every ambiguity is resolved by codebase inspection or documented as an assumption. Do not ask the user anything. If HIGH risk, pause only for explicit confirmation on destructive/production/credentialed/billing/legal/git-history actions — nothing else.
+The user has given one prompt and expects a complete result with no further questions. Every ambiguity is resolved by codebase inspection or documented as an assumption. Do not ask the user anything. If HIGH risk, pause only for explicit confirmation on destructive/production/credentialed/billing/legal/git-history actions (present **Approve / Cancel** via the \`question\` tool) — nothing else.
 
 **Autonomous is not silent.** Use the \`opx-personal-assistant\` skill if available and narrate every phase to the user as it happens — intent, assessment findings, the delegation plan, progress, and the verified result. You don't ask questions; you keep them continuously informed like a personal assistant. You drive the loop yourself (Cerebro's four-phase process).
 

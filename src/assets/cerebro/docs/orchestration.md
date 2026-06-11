@@ -13,6 +13,8 @@ Cerebro turns OpenCode into a coordinated X-Men-themed agent workflow using nati
 
 If the user explicitly invokes `/cerebro-ultrawork` for ambiguous or product-shaped work, Cerebro asks only for blockers it cannot infer safely. Otherwise Legion and Cypher record assumptions in customer/requirements notepads before Professor X, Beast, Emma Frost, and the workers proceed.
 
+On a natural-language request (no slash command), Cerebro's **Intent Gate** triages the request by complexity and risk, picks a recommended path from the table above, then confirms it as a **selectable choice** via OpenCode's built-in `question` tool — recommended option first — instead of asking the user to type a number. A request triaged as Simple is answered directly with no confirmation.
+
 ## Three-Layer Architecture
 
 ### Planning Layer (Cerebro + consultants)

@@ -13,6 +13,13 @@
   the optional `opx-personal-assistant` skill sharpens *how* it keeps the user informed.
 - Removed the now-vestigial `.cerebro/cerebro-identity.md` — the Cerebro agent (a `mode: primary`
   default agent) is the single source of truth for Cerebro's identity and orchestration.
+- **Sharper Intent Gate.** Cerebro now triages a natural-language request by complexity and risk and
+  recommends a path (Direct / Autonomous / Collaborative) instead of asking open-endedly — deciding
+  more, asking less. When it does need the user to choose, it presents the options through OpenCode's
+  built-in interactive `question` tool (selectable, recommended option first) rather than a "reply
+  with 1 or 2" text menu; the same selector now backs the autonomy choice, the session-resume
+  prompt, and the `/cerebro-ultrawork` HIGH-risk Approve/Cancel pause. Falls back to a numbered text
+  prompt when the `question` tool isn't available. (Cerebro already had `question: "allow"`.)
 - Removed the `/cerebro-index` command and `.cerebro/project-context.md`. Codebase assessment is now
   on-demand inside Cerebro's Phase 2 (scout the in-scope structure with Nightcrawler/Forge or quick
   reads each run), so a separate pre-indexing step and its cached context file are no longer needed.
