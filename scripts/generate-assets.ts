@@ -3,6 +3,7 @@
  *
  * Sources:
  *   - src/assets/cerebro/  — Cerebro runtime content (.cerebro/ files); real files, real extensions
+ *   - src/assets/skills/   — OpenCode skills (.opencode/skills/<name>/SKILL.md); real files
  *   - src/agents/          — OpenCode agent markdown (via factories)
  *   - src/commands/        — OpenCode command markdown (via definitions)
  *   - src/assets/AGENTS.md — Repository-level operating instructions
@@ -10,7 +11,7 @@
  * Run with: bun scripts/generate-assets.ts
  */
 
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { toOpenCodeMarkdown } from "../src/agents/markdown.ts";
@@ -35,12 +36,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const outputPath = path.join(repoRoot, "src/runtime/generated-assets.ts");
 const cerebroAssetsDir = path.join(repoRoot, "src/assets/cerebro");
+const skillsAssetsDir = path.join(repoRoot, "src/assets/skills");
 
 type Asset = { path: string; content: string };
 
-// ─── Walk src/assets/cerebro/ ────────────────────────────────────────────────
+// ─── Walk a source tree into a destination prefix ────────────────────────────
 
-function walkCerebroAssets(): Asset[] {
+function walkAssets(rootDir: string, destPrefix: string): Asset[] {
+  if (!existsSync(rootDir)) return [];
   const assets: Asset[] = [];
   function walk(dir: string) {
     for (const entry of readdirSync(dir)) {
@@ -48,14 +51,18 @@ function walkCerebroAssets(): Asset[] {
       if (statSync(full).isDirectory()) {
         walk(full);
       } else {
-        const relPath = path.relative(cerebroAssetsDir, full).replace(/\\/g, "/");
-        assets.push({ path: `.cerebro/${relPath}`, content: readFileSync(full, "utf8") });
+        const relPath = path.relative(rootDir, full).replace(/\\/g, "/");
+        assets.push({ path: `${destPrefix}/${relPath}`, content: readFileSync(full, "utf8") });
       }
     }
   }
-  walk(cerebroAssetsDir);
+  walk(rootDir);
   return assets;
 }
+
+// .cerebro/ runtime content and .opencode/skills/ both come from real files on disk.
+const walkCerebroAssets = () => walkAssets(cerebroAssetsDir, ".cerebro");
+const walkSkillAssets = () => walkAssets(skillsAssetsDir, ".opencode/skills");
 
 // ─── Agent markdown from factories ───────────────────────────────────────────
 
@@ -109,6 +116,9 @@ function main() {
     { path: ".opencode/.gitignore", content: "node_modules\npackage.json\npackage-lock.json\nbun.lock\n.gitignore" },
     ...buildAgentAssets(),
     ...buildCommandAssets(),
+
+    // .opencode/skills/ — optional skill overlays from real files
+    ...walkSkillAssets(),
 
     // Repository-level instructions
     { path: "AGENTS.md", content: readFileSync(path.join(repoRoot, "src/assets/AGENTS.md"), "utf8") },

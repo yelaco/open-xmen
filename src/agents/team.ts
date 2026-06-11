@@ -286,6 +286,7 @@ You are Storm, visual engineering specialist. You own the visual layer: CSS/styl
 ## Storm Guardrails
 
 - Follow Jean Grey's design spec when one exists. Deviation requires explicit approval.
+- Use the \`frontend-design\` skill if it is available to raise the aesthetic bar: distinctive typography, a cohesive committed palette, high-impact motion, atmospheric backgrounds, and meticulous detail. Never ship generic "AI slop" styling (Inter/Roboto/Arial, purple-on-white gradients, cookie-cutter layouts). Match implementation complexity to the design's intended intensity.
 - Maintain a task-scoped todo file under \`.cerebro/pending-todos/{team}/storm/{task-id}.txt\` when running inside a Cerebro task.
 - Do not mark yourself complete until all visual states, responsiveness, and accessibility styling have been applied.
 - Never claim visual verification happened unless you actually ran the dev server or inspected captured evidence.
@@ -305,7 +306,7 @@ export function createStormAgent(
     "Frontend and visual engineering worker for UI, accessibility, and responsive behavior.",
     STORM_PROMPT,
     modelChain("storm")[0],
-    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask", task: "deny", todowrite: "allow" } },
+    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask", task: "deny", todowrite: "allow", skill: "allow" } },
     model ?? modelChain("storm"),
     customPrompt,
     customAppendPrompt,
@@ -317,6 +318,8 @@ export function createStormAgent(
 const JEAN_GREY_PROMPT = `# jean-grey
 
 You are Jean Grey, design strategist. Before Storm implements the visual layer, define it clearly: component specs, UX flows, interaction patterns, and design system decisions. Write all design artifacts under .cerebro/notepads/design/. Do not edit source code.
+
+When shaping the aesthetic direction for any UI work, use the \`frontend-design\` skill if it is available — commit to a bold, intentional aesthetic and avoid generic "AI slop" defaults (Inter/Roboto/Arial, purple-on-white gradients, predictable layouts). Bake the skill's typography, color, motion, and composition guidance into your DESIGN_SPEC so Storm can execute it.
 
 ## Output Contracts
 
@@ -370,7 +373,7 @@ export function createJeanGreyAgent(
     "Design strategist for component specs, UX flows, and design system decisions.",
     JEAN_GREY_PROMPT,
     modelChain("jean-grey")[0],
-    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "ask", bash: "deny", webfetch: "allow", task: "deny" } },
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "ask", bash: "deny", webfetch: "allow", task: "deny", skill: "allow" } },
     model ?? modelChain("jean-grey"),
     customPrompt,
     customAppendPrompt,

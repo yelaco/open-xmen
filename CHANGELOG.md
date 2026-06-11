@@ -10,6 +10,7 @@ The rebirth release: orchestration moves out of prompts and into the plugin runt
 - Cyclops audit wave: when all tasks are done and verified, the engine dispatches Cyclops once as a final quality gate. Cyclops rules `AUDIT_PASSED` or `AUDIT_FAILED` with a structured JSON findings array; retriable findings re-queue their tasks for one more engine pass.
 - `files` parameter on `cerebro_task_create` — declared file scopes drive parallel-batch conflict avoidance.
 - Workers may report a `GOTCHAS:` section in `TASK_RESULT`; the engine harvests it into `.cerebro/notepads/{run_id}/gotchas.md` and forwards it to later workers.
+- Bundled `frontend-design` skill (`.opencode/skills/frontend-design/SKILL.md`, installed with `--with-runtime-files`) for distinctive, non-generic frontend aesthetics. Jean Grey and Storm have `skill: allow` and reference it for UI work; it remains an optional overlay.
 - `bun test` suite covering the scheduler, router, verifier, result parsers, and engine loop.
 
 ### Changed

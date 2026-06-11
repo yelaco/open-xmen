@@ -376,7 +376,11 @@ When \`/cerebro-ultrawork\` receives an unclear full-product prompt, it asks onl
 ` },
   { path: ".cerebro/docs/skill-policy.md", content: `# Skill Policy
 
-Cerebro ships without required skills. Skills can be added later as optional overlays.
+Cerebro ships skills only as optional overlays — the base workflow never requires one. Installed with \`--with-runtime-files\`, skills land under \`.opencode/skills/<name>/SKILL.md\` and OpenCode discovers them automatically.
+
+## Bundled Skills
+
+- **\`frontend-design\`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds). Both agents have \`skill: allow\`. Still optional: if the skill is absent, both fall back to their base prompts.
 
 ## Rules
 
@@ -389,6 +393,7 @@ Cerebro ships without required skills. Skills can be added later as optional ove
 
 ## Good Uses
 
+- Jean Grey and Storm use the \`frontend-design\` skill to commit to a bold, intentional aesthetic for UI work.
 - Storm uses an available browser or accessibility skill to verify UI behavior.
 - Wolverine uses an available language or test skill to run a focused suite.
 - Sage uses an available docs skill to fetch more precise API references.
@@ -2550,6 +2555,7 @@ permission:
   bash: deny
   webfetch: allow
   task: deny
+  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-opus-4-8
@@ -2557,6 +2563,8 @@ options:
 # jean-grey
 
 You are Jean Grey, design strategist. Before Storm implements the visual layer, define it clearly: component specs, UX flows, interaction patterns, and design system decisions. Write all design artifacts under .cerebro/notepads/design/. Do not edit source code.
+
+When shaping the aesthetic direction for any UI work, use the \`frontend-design\` skill if it is available — commit to a bold, intentional aesthetic and avoid generic "AI slop" defaults (Inter/Roboto/Arial, purple-on-white gradients, predictable layouts). Bake the skill's typography, color, motion, and composition guidance into your DESIGN_SPEC so Storm can execute it.
 
 ## Output Contracts
 
@@ -2781,6 +2789,7 @@ permission:
   webfetch: ask
   task: deny
   todowrite: allow
+  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2801,6 +2810,7 @@ You are Storm, visual engineering specialist. You own the visual layer: CSS/styl
 ## Storm Guardrails
 
 - Follow Jean Grey's design spec when one exists. Deviation requires explicit approval.
+- Use the \`frontend-design\` skill if it is available to raise the aesthetic bar: distinctive typography, a cohesive committed palette, high-impact motion, atmospheric backgrounds, and meticulous detail. Never ship generic "AI slop" styling (Inter/Roboto/Arial, purple-on-white gradients, cookie-cutter layouts). Match implementation complexity to the design's intended intensity.
 - Maintain a task-scoped todo file under \`.cerebro/pending-todos/{team}/storm/{task-id}.txt\` when running inside a Cerebro task.
 - Do not mark yourself complete until all visual states, responsiveness, and accessibility styling have been applied.
 - Never claim visual verification happened unless you actually ran the dev server or inspected captured evidence.
@@ -2970,6 +2980,48 @@ The user has given one prompt and expects a complete result with no further ques
 12. Call \`cerebro_verify_pending\`; final-report only when todos are clear or explicitly blocked.
 
 Final report: assumptions made, files changed, tests/verification, audit verdict, customer verdict (if run), unresolved issues, workflow problem list path, \`.cerebro\` run paths.` },
+  { path: ".opencode/skills/frontend-design/SKILL.md", content: `---
+name: frontend-design
+description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, or applications. Generates creative, polished code that avoids generic AI aesthetics.
+---
+
+This skill guides creation of distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.
+
+The user provides frontend requirements: a component, page, application, or interface to build. They may include context about the purpose, audience, or technical constraints.
+
+## Design Thinking
+
+Before coding, understand the context and commit to a BOLD aesthetic direction:
+- **Purpose**: What problem does this interface solve? Who uses it?
+- **Tone**: Pick an extreme: brutally minimal, maximalist chaos, retro-futuristic, organic/natural, luxury/refined, playful/toy-like, editorial/magazine, brutalist/raw, art deco/geometric, soft/pastel, industrial/utilitarian, etc. There are so many flavors to choose from. Use these for inspiration but design one that is true to the aesthetic direction.
+- **Constraints**: Technical requirements (framework, performance, accessibility).
+- **Differentiation**: What makes this UNFORGETTABLE? What's the one thing someone will remember?
+
+**CRITICAL**: Choose a clear conceptual direction and execute it with precision. Bold maximalism and refined minimalism both work - the key is intentionality, not intensity.
+
+Then implement working code (HTML/CSS/JS, React, Vue, etc.) that is:
+- Production-grade and functional
+- Visually striking and memorable
+- Cohesive with a clear aesthetic point-of-view
+- Meticulously refined in every detail
+
+## Frontend Aesthetics Guidelines
+
+Focus on:
+- **Typography**: Choose fonts that are beautiful, unique, and interesting. Avoid generic fonts like Arial and Inter; opt instead for distinctive choices that elevate the frontend's aesthetics; unexpected, characterful font choices. Pair a distinctive display font with a refined body font.
+- **Color & Theme**: Commit to a cohesive aesthetic. Use CSS variables for consistency. Dominant colors with sharp accents outperform timid, evenly-distributed palettes.
+- **Motion**: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions. Use scroll-triggering and hover states that surprise.
+- **Spatial Composition**: Unexpected layouts. Asymmetry. Overlap. Diagonal flow. Grid-breaking elements. Generous negative space OR controlled density.
+- **Backgrounds & Visual Details**: Create atmosphere and depth rather than defaulting to solid colors. Add contextual effects and textures that match the overall aesthetic. Apply creative forms like gradient meshes, noise textures, geometric patterns, layered transparencies, dramatic shadows, decorative borders, custom cursors, and grain overlays.
+
+NEVER use generic AI-generated aesthetics like overused font families (Inter, Roboto, Arial, system fonts), cliched color schemes (particularly purple gradients on white backgrounds), predictable layouts and component patterns, and cookie-cutter design that lacks context-specific character.
+
+Interpret creatively and make unexpected choices that feel genuinely designed for the context. No design should be the same. Vary between light and dark themes, different fonts, different aesthetics. NEVER converge on common choices (Space Grotesk, for example) across generations.
+
+**IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
+
+Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
+` },
   { path: "AGENTS.md", content: `# Cerebro OpenCode Runtime
 
 This project uses the Cerebro workflow on OpenCode.
