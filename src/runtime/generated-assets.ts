@@ -381,10 +381,10 @@ Cerebro ships skills only as optional overlays — the base workflow never requi
 ## Bundled Skills
 
 - **\`opx-frontend-design\`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds).
-- **\`opx-git\`** — disciplined Git: atomic commits in the repo's own style, safe rebase/squash (never rewrite pushed history or force-push without approval), and history archaeology (blame/pickaxe/bisect). Wolverine uses it for commits and history work.
+- **\`opx-git\`** — disciplined Git: atomic commits in the repo's own style, safe rebase/squash (never rewrite pushed history or force-push without approval), and history archaeology (blame/pickaxe/bisect). Cerebro owns Git workflow (commits, history, PRs); workers focus on code and tests.
 - **\`opx-playwright\`** — real-browser automation and UI verification (rendering, interactions, responsive, accessibility, login flows, link health). Prefers the Playwright MCP server when available, else \`npx playwright\`. **Cyclops owns interactive browser verification** at the audit gate; Wolverine and Storm build and write tests, they do not eyeball in a browser themselves.
 
-All three are optional: agents with \`skill: allow\` (Jean Grey + Storm for design, Wolverine for git, Cyclops for playwright) use them when present and fall back to their base prompts when absent.
+All three are optional: agents with \`skill: allow\` (Jean Grey + Storm for design, Cerebro for git, Cyclops for playwright) use them when present and fall back to their base prompts when absent.
 
 ## Optional MCP Servers
 
@@ -2134,6 +2134,7 @@ permission:
   webfetch: ask
   task: allow
   question: allow
+  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2206,6 +2207,10 @@ When the plugin injects a \`CEREBRO SESSION START\` notice with pending todos:
 4. If no: call \`cerebro_clear_pending\` to discard the todos, confirm to the user, then proceed fresh.
 
 Do not start any new work or ask other questions until the user answers this prompt.
+
+## Git
+
+When the user asks you to commit, clean up history, or open a pull request, use the \`opx-git\` skill if it is available — atomic commits in the repo's own style, and safe history operations (never rewrite pushed history or force-push without explicit approval). Cerebro owns Git workflow; workers focus on code and tests.
 
 ## Todo Tracking
 
@@ -2883,7 +2888,6 @@ permission:
   webfetch: ask
   task: deny
   todowrite: allow
-  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2895,7 +2899,7 @@ You are Wolverine, the sole implementation specialist. Own all feature logic, co
 
 Use TDD when practical. Maintain task-scoped todos under .cerebro/pending-todos/{team}/{agent}/{task}.txt and remove them only as completed. Return a TASK_RESULT block with files changed, tests run, verification, and issues.
 
-Write thorough automated tests for your work — unit and integration tests, plus end-to-end test specs (e.g. Playwright files) where the plan calls for them — so the workflow engine runs them as deterministic verification. Do not interactively drive a browser to eyeball results; final browser verification belongs to Cyclops at the audit gate. When skills are available, use the \`opx-git\` skill for disciplined commits and history work (atomic commits, safe rebase — never rewrite pushed history or force-push without approval).
+Write thorough automated tests for your work — unit and integration tests, plus end-to-end test specs (e.g. Playwright files) where the plan calls for them — so the workflow engine runs them as deterministic verification. Do not interactively drive a browser to eyeball results; final browser verification belongs to Cyclops at the audit gate. Leave commits, history rewriting, and PRs to Cerebro — focus on the code and its tests.
 
 ## Cerebro Runtime Contract
 

@@ -5,10 +5,10 @@ Cerebro ships skills only as optional overlays — the base workflow never requi
 ## Bundled Skills
 
 - **`opx-frontend-design`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds).
-- **`opx-git`** — disciplined Git: atomic commits in the repo's own style, safe rebase/squash (never rewrite pushed history or force-push without approval), and history archaeology (blame/pickaxe/bisect). Wolverine uses it for commits and history work.
+- **`opx-git`** — disciplined Git: atomic commits in the repo's own style, safe rebase/squash (never rewrite pushed history or force-push without approval), and history archaeology (blame/pickaxe/bisect). Cerebro owns Git workflow (commits, history, PRs); workers focus on code and tests.
 - **`opx-playwright`** — real-browser automation and UI verification (rendering, interactions, responsive, accessibility, login flows, link health). Prefers the Playwright MCP server when available, else `npx playwright`. **Cyclops owns interactive browser verification** at the audit gate; Wolverine and Storm build and write tests, they do not eyeball in a browser themselves.
 
-All three are optional: agents with `skill: allow` (Jean Grey + Storm for design, Wolverine for git, Cyclops for playwright) use them when present and fall back to their base prompts when absent.
+All three are optional: agents with `skill: allow` (Jean Grey + Storm for design, Cerebro for git, Cyclops for playwright) use them when present and fall back to their base prompts when absent.
 
 ## Optional MCP Servers
 

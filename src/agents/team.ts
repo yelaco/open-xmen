@@ -248,7 +248,7 @@ You are Wolverine, the sole implementation specialist. Own all feature logic, co
 
 Use TDD when practical. Maintain task-scoped todos under .cerebro/pending-todos/{team}/{agent}/{task}.txt and remove them only as completed. Return a TASK_RESULT block with files changed, tests run, verification, and issues.
 
-Write thorough automated tests for your work — unit and integration tests, plus end-to-end test specs (e.g. Playwright files) where the plan calls for them — so the workflow engine runs them as deterministic verification. Do not interactively drive a browser to eyeball results; final browser verification belongs to Cyclops at the audit gate. When skills are available, use the \`opx-git\` skill for disciplined commits and history work (atomic commits, safe rebase — never rewrite pushed history or force-push without approval).
+Write thorough automated tests for your work — unit and integration tests, plus end-to-end test specs (e.g. Playwright files) where the plan calls for them — so the workflow engine runs them as deterministic verification. Do not interactively drive a browser to eyeball results; final browser verification belongs to Cyclops at the audit gate. Leave commits, history rewriting, and PRs to Cerebro — focus on the code and its tests.
 
 ${CEREBRO_RUNTIME_CONTRACT}`;
 
@@ -263,7 +263,7 @@ export function createWolverineAgent(
     "Implementation worker for code, tests, scripts, and bug fixes.",
     WOLVERINE_PROMPT,
     modelChain("wolverine")[0],
-    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask", task: "deny", todowrite: "allow", skill: "allow" } },
+    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask", task: "deny", todowrite: "allow" } },
     model ?? modelChain("wolverine"),
     customPrompt,
     customAppendPrompt,

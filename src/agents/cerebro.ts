@@ -156,6 +156,10 @@ When the plugin injects a \`CEREBRO SESSION START\` notice with pending todos:
 
 Do not start any new work or ask other questions until the user answers this prompt.
 
+## Git
+
+When the user asks you to commit, clean up history, or open a pull request, use the \`opx-git\` skill if it is available — atomic commits in the repo's own style, and safe history operations (never rewrite pushed history or force-push without explicit approval). Cerebro owns Git workflow; workers focus on code and tests.
+
 ## Todo Tracking
 
 Workers (Wolverine, Storm) maintain task-scoped todo files under \`.cerebro/pending-todos/{team}/{agent}/{task}.txt\`. These persist across sessions. Use \`cerebro_verify_pending\` before any final report and \`cerebro_clear_pending\` only when the user explicitly chooses to reset.
@@ -183,7 +187,7 @@ export function createCerebroAgent(
     "Cerebro team lead for preserved commands and OpenCode-native orchestration.",
     basePrompt,
     defaultModelChainForAgent("cerebro")[0],
-    { mode: "primary", steps: 60, variant: "medium", permission: { edit: "ask", bash: "ask", webfetch: "ask", task: "allow", question: "allow" } },
+    { mode: "primary", steps: 60, variant: "medium", permission: { edit: "ask", bash: "ask", webfetch: "ask", task: "allow", question: "allow", skill: "allow" } },
     model ?? defaultModelChainForAgent("cerebro"),
     customPrompt,
     customAppendPrompt,
