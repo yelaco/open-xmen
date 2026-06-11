@@ -27,7 +27,7 @@ const requiredPackagedFiles = [
 
 const allowedTopLevelFiles = new Set(['package.json', 'README.md', 'LICENSE']);
 const forbiddenPackagedPathPattern = /(^|\/)\.env(\.|$|\/)|secret|credential|token|private[-_]?key|node_modules|__pycache__|\.pyc$|\.opencode\/|\.cerebro\/|\.claude\/|\.omx\/|\.sisyphus\//i;
-const expectedResolvedCommands = ['cerebro-index', 'cerebro-plan', 'cerebro-start-work', 'cerebro-ultrawork'];
+const expectedResolvedCommands = ['cerebro-plan', 'cerebro-start-work', 'cerebro-ultrawork'];
 const expectedResolvedAgents = [
   'cerebro',
   'legion',
@@ -230,7 +230,7 @@ function verifyFreshInstall(tarballPath: string) {
       await hooks.config?.(config);
       const commandNames = Object.keys(config.command ?? {}).sort();
       const agentNames = Object.keys(config.agent ?? {}).sort();
-      if (commandNames.length !== 4) throw new Error(\`Expected 4 commands, got \${commandNames.length}\`);
+      if (commandNames.length !== 3) throw new Error(\`Expected 3 commands, got \${commandNames.length}\`);
       if (!commandNames.includes('cerebro-plan') || !commandNames.includes('cerebro-ultrawork')) throw new Error('Missing preserved command registrations');
       if (agentNames.length !== 13) throw new Error(\`Expected 13 agents, got \${agentNames.length}\`);
       if (!config.agent?.cerebro) throw new Error('Missing cerebro agent registration');

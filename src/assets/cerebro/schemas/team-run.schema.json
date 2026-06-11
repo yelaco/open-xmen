@@ -34,7 +34,7 @@
     },
     "command": {
       "type": "string",
-      "enum": ["/cerebro-ultrawork", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index"]
+      "enum": ["/cerebro-ultrawork", "/cerebro-plan", "/cerebro-start-work"]
     },
     "status": {
       "type": "string",

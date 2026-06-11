@@ -21,7 +21,6 @@ REQUIRED_AGENTS = {
     "emma-frost",
 }
 REQUIRED_COMMANDS = {
-    "cerebro-index",
     "cerebro-plan",
     "cerebro-start-work",
     "cerebro-ultrawork",

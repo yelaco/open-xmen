@@ -7,7 +7,6 @@ This is the operational workflow for the OpenCode-native Cerebro runtime.
 ```mermaid
 flowchart TB
     User["User Request"] --> Gate["Cerebro Intent Gate"]
-    Gate -->|"index repo"| Index["Project Index"]
     Gate -->|"simple"| Direct["Direct Response"]
     Gate -->|"complex / risky"| Planning
 
@@ -36,7 +35,6 @@ flowchart TB
     Audit -->|"AUDIT_FAILED"| Findings["Findings → problem records\n+ Cerebro re-queues tasks"] --> Loop
     Loop -->|"blocked"| Gate
     State --> Result["Verified, Audited Result"]
-    Index --> Context[".cerebro/project-context.md"]
 ```
 
 ## Commands
@@ -44,7 +42,6 @@ flowchart TB
 | Command | Purpose |
 |---|---|
 | `/cerebro-ultrawork [task]` | Autonomous execution for clear tasks (opens with the "To me, my X-Men!" catchphrase); asks before using Cerebro's own judgment on unclear product-shaped prompts. |
-| `/cerebro-index` | Build or refresh repository context. |
 | `/cerebro-plan [task]` | Interview-first planning with Professor X. |
 | `/cerebro-start-work` | Execute or resume the latest Cerebro plan. |
 
@@ -61,8 +58,6 @@ flowchart TB
 | `.cerebro/scripts/validate-boulder.py` | Cerebro | Reusable doctor check for `.cerebro/boulder.json`. |
 | `.cerebro/scripts/validate-team-runs.py` | Cerebro | Reusable doctor check for the team-run template and manifests. |
 | `.cerebro/templates/plan.md` | Professor X | Canonical plan schema. |
-| `.cerebro/templates/project-context.md` | Cerebro | Canonical repository index schema. |
-| `.cerebro/project-context.md` | Cerebro | Indexed stack, commands, conventions, entrypoints, and risks. |
 | `.cerebro/plans/*.md` | Professor X | Approved implementation plans. |
 | `.cerebro/boulder.json` | Cerebro | Business-level execution checkpoint: active plan, overall status, approvals, verification history, and decisions. Task progress lives in `.cerebro/team-runs/{run-id}.tasks.json`. |
 | `.cerebro/team-runs/{run-id}.json` | Cerebro | Run manifest for command, team name, teammates, approvals, mailbox decisions, verification, and cleanup. |

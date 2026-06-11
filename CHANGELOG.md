@@ -13,6 +13,9 @@
   the optional `opx-personal-assistant` skill sharpens *how* it keeps the user informed.
 - Removed the now-vestigial `.cerebro/cerebro-identity.md` — the Cerebro agent (a `mode: primary`
   default agent) is the single source of truth for Cerebro's identity and orchestration.
+- Removed the `/cerebro-index` command and `.cerebro/project-context.md`. Codebase assessment is now
+  on-demand inside Cerebro's Phase 2 (scout the in-scope structure with Nightcrawler/Forge or quick
+  reads each run), so a separate pre-indexing step and its cached context file are no longer needed.
 - Per-task **effort** override on `cerebro_task_create` (`low` / `high`): runs that task's worker on
   the cheap/fast model (`low`) or the top-reasoning model (`high`) without changing which agent
   runs it; unset keeps the category's normal model. Plans mark trivial/hard tasks via `Effort`.

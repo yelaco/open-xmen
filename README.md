@@ -115,7 +115,6 @@ node dist/cli.js install --dir /path/to/your/project
 Then run the Cerebro workflow command you need inside OpenCode:
 
 ```text
-/cerebro-index
 /cerebro-plan add a REST API for user authentication
 /cerebro-start-work
 ```
@@ -146,7 +145,6 @@ open-xmen models
 
 | Command | What it does |
 |---|---|
-| `/cerebro-index` | Build `.cerebro/project-context.md` using Nightcrawler, Sage, Forge, and Beast. |
 | `/cerebro-plan [task]` | Interview-first planning with Professor X, Beast, and Emma Frost validation. |
 | `/cerebro-start-work` | Execute or resume the latest plan — Cerebro drives the delegation loop with deterministic verification, then a final Cyclops audit. |
 | `/cerebro-ultrawork [task]` | Autonomous full-team mode (opens with the "To me, my X-Men!" catchphrase) with Legion + Cypher intent consult and final Legion acceptance — Cerebro-orchestrated, Cyclops-audited. |

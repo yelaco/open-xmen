@@ -4,7 +4,6 @@ export const CEREBRO_COMMANDS = [
   "/cerebro-ultrawork",
   "/cerebro-plan",
   "/cerebro-start-work",
-  "/cerebro-index",
 ] as const;
 
 export type CerebroCommand = (typeof CEREBRO_COMMANDS)[number];
@@ -19,28 +18,6 @@ export interface CommandDefinition {
 const COMMAND_MODEL = defaultModelForAgent("cerebro");
 
 export const CEREBRO_COMMAND_DEFINITIONS: CommandDefinition[] = [
-  {
-    name: "cerebro-index",
-    description: "Build or refresh .cerebro/project-context.md with OpenCode Cerebro agents.",
-    model: COMMAND_MODEL,
-    content: `Create or refresh \`.cerebro/project-context.md\` for this repository.
-
-## Required flow
-
-1. Announce Cerebro indexing mode.
-2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-index\`, the objective, and risk \`LOW\`.
-3. Create tasks for:
-   - \`nightcrawler\`: map directories, entrypoints, tests, configs, risky files.
-   - \`sage\`: identify frameworks, package managers, docs, version gotchas, likely verification commands.
-   - \`forge\`: summarize architecture, ownership boundaries, and risky areas.
-   - \`beast\`: gap-check the final index for invented facts and weak verification guidance.
-4. Use \`cerebro_agent_task\` or OpenCode subagents/mentions for the tasks where available; otherwise do the read-only inspection directly but still record task state.
-5. Fill \`.cerebro/templates/project-context.md\` with discovered facts only. Use \`Unknown\` for unknown fields.
-6. Write \`.cerebro/project-context.md\`.
-7. Record mailbox decisions for conflicting findings, checkpoint the run, verify pending todos, and report the indexed stack, commands, risky areas, manifest path, and cleanup status.
-
-Do not modify source files outside \`.cerebro/project-context.md\` and run metadata.`,
-  },
   {
     name: "cerebro-plan",
     description: "Interactive planning mode — Cypher interviews the user, Professor X drafts, Beast and Emma Frost review.",
@@ -78,7 +55,7 @@ Use the \`opx-personal-assistant\` skill if available and narrate every phase to
 ## Required flow
 
 1. Announce field execution mode.
-2. **Codebase Assessment** — read the newest \`.cerebro/plans/*.md\`, \`.cerebro/project-context.md\` if present, \`.cerebro/boulder.json\` if present, and relevant \`.cerebro/notepads/\`. Give the user a short summary of the architecture in scope, the verify commands, and any risks before execution. If \`boulder.json\` shows an interrupted run, tell the user you're resuming and from where.
+2. **Codebase Assessment** — read the newest \`.cerebro/plans/*.md\`, \`.cerebro/boulder.json\` if present, and relevant \`.cerebro/notepads/\`; scout the structure in scope (Nightcrawler / Forge, or quick reads for small repos). Give the user a short summary of the architecture in scope, the verify commands, and any risks before execution. If \`boulder.json\` shows an interrupted run, tell the user you're resuming and from where.
 3. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-start-work\`, objective from the plan, and the plan risk.
 4. Create one task record per plan task with \`cerebro_task_create\`. Each call must include \`category\` (visual-engineering | architecture | explore | research | deep | quick), \`depends_on\` (task ids), \`files\` from the task's \`Files\` field, and \`verification_commands\` from the task's \`Verify\` field. Pass \`effort\` only when the plan marks a task trivial (\`low\`) or hard (\`high\`). Task descriptions must carry the task's \`What\` and \`TDD\` text so workers receive full context.
 5. **Smart Delegation loop** — announce the delegation plan to the user, then drive the loop, narrating each step:
@@ -109,7 +86,7 @@ The user has given one prompt and expects a complete result with no further ques
 
 1. Open with the exact catchphrase on its own line — **"To me, my X-Men!"** — then state the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`) in one short line.
 2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-ultrawork\` and classified risk.
-3. **Codebase Assessment** — map the architecture before touching a line: read \`.cerebro/project-context.md\` if present, otherwise scout the structure in scope (Nightcrawler / Forge, or quick reads for small repos). Report a short summary (stack, in-scope areas, conventions, verify commands, risks) to the user before planning.
+3. **Codebase Assessment** — map the architecture before touching a line: scout the structure in scope (Nightcrawler / Forge, or quick reads for small repos). Report a short summary (stack, in-scope areas, conventions, verify commands, risks) to the user before planning.
 4. Emit visible progress milestones with \`cerebro_progress\` whenever the run enters a new phase or a batch of work starts/completes, and narrate each transition to the user.
 5. **Legion** (product-shaped work only): run Legion through \`cerebro_agent_task\` to produce customer vision from the prompt and codebase. Legion writes \`CUSTOMER_VISION_READY\` under \`.cerebro/notepads/customer/\` — no user questions.
 6. **Cypher** (\`MODE: autonomous\`): run Cypher through \`cerebro_agent_task\` with the original prompt, intent sub-type, Legion's vision (if produced), and \`MODE: autonomous\`. Cypher produces \`REQUIREMENTS_READY\` directly — using safe defaults and documenting all assumptions. No CLARIFY rounds.

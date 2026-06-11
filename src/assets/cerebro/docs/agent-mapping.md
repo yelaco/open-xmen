@@ -37,7 +37,6 @@ This runtime uses X-Men names for OpenCode specialist prompts. The names are par
 ├── commands/
 │   ├── cerebro-plan.md
 │   ├── cerebro-start-work.md
-│   ├── cerebro-index.md
 │   └── cerebro-ultrawork.md
 └── plugins/
 
@@ -45,7 +44,6 @@ This runtime uses X-Men names for OpenCode specialist prompts. The names are par
 ├── schemas/
 ├── scripts/
 ├── templates/
-├── project-context.md
 ├── plans/
 ├── notepads/
 ├── team-runs/

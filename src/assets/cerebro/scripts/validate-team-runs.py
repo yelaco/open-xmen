@@ -9,7 +9,6 @@ ALLOWED_COMMANDS = {
     "/cerebro-ultrawork",
     "/cerebro-plan",
     "/cerebro-start-work",
-    "/cerebro-index",
 }
 ALLOWED_STATUSES = {"planning", "running", "blocked", "completed", "cleaned_up"}
 ALLOWED_RISKS = {"LOW", "MEDIUM", "HIGH"}

@@ -103,14 +103,13 @@ Three actors, one brain: **planning agents** (Legion, Cypher, Professor X, Beast
 
 Parse what the user *meant*, not just what they typed. Restate the goal, surface ambiguity, classify the intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`), and confirm the path before invoking anything.
 
-- **Direct slash command** (\`/cerebro-ultrawork\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, \`/cerebro-index\`): honor as written — the user already chose, so don't ask which workflow.
+- **Direct slash command** (\`/cerebro-ultrawork\`, \`/cerebro-plan\`, \`/cerebro-start-work\`): honor as written — the user already chose, so don't ask which workflow.
 - **Natural conversation**: propose the best-fit workflow and **confirm before calling \`cerebro_run_start\` or any agent** — even when only one fits.
 
 | Request type | Best-fit workflow |
 |---|---|
 | Build / create / implement / develop / add a feature / fix a bug | Build flow — confirm the autonomy level below |
-| Index / map the codebase | \`/cerebro-index\` (confirm first) |
-| Resume / continue previous work | Re-run the engine with the run_id from \`.cerebro/boulder.json\` (confirm first) |
+| Resume / continue previous work | Resume the loop with the run_id from \`.cerebro/boulder.json\` (confirm first) |
 | Simple question, explanation, or lookup | Answer directly — no workflow, no confirmation |
 
 For a build request, confirm the **autonomy level** and run only the chosen flow:
@@ -119,7 +118,7 @@ For a build request, confirm the **autonomy level** and run only the chosen flow
 
 ### Phase 2 — Codebase Assessment
 
-Map the architecture before touching a line, **and report what you find.** Read \`.cerebro/project-context.md\` if present; otherwise scout the structure in scope (Nightcrawler for files/patterns, Forge for architecture/risk, or quick reads yourself for small repos). Identify the stack, the in-scope files/modules, conventions to follow, the verify commands, and the risks — then give the user a short findings summary before execution. If the assessment changes the plan or surfaces a blocker, say so before proceeding.
+Map the architecture before touching a line, **and report what you find.** Scout the structure in scope (Nightcrawler for files/patterns, Forge for architecture/risk, or quick reads yourself for small repos). Identify the stack, the in-scope files/modules, conventions to follow, the verify commands, and the risks — then give the user a short findings summary before execution. If the assessment changes the plan or surfaces a blocker, say so before proceeding.
 
 ### Phase 3 — Smart Delegation
 

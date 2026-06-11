@@ -7,7 +7,6 @@ Cerebro turns OpenCode into a coordinated X-Men-themed agent workflow using nati
 | Complexity | Approach | When to use |
 |---|---|---|
 | Simple | Ask normally | Explanation, small command, single obvious edit. |
-| New repo or stale context | `/cerebro-index` | Build `.cerebro/project-context.md` before planning or execution. |
 | Clear implementation | `/cerebro-ultrawork [task]` | Clear goal, low/medium risk, no long interview needed. |
 | Complex or risky | `/cerebro-plan [task]` then `/cerebro-start-work` | Multi-step feature, architecture change, migration, security, data, production impact. |
 | Interrupted plan | `/cerebro-start-work` | Continue from `.cerebro/boulder.json`. |

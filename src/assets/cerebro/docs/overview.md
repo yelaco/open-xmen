@@ -15,7 +15,6 @@ Legacy `.claude/` files may exist as migration source or compatibility material,
 
 ```text
 /cerebro-ultrawork add request validation to the API
-/cerebro-index
 /cerebro-plan redesign the authentication flow
 /cerebro-start-work
 ```
@@ -25,7 +24,6 @@ Legacy `.claude/` files may exist as migration source or compatibility material,
 | Mode | Command | Use when |
 |---|---|---|
 | Direct | Ask normally | The request is simple and low-risk. |
-| Index | `/cerebro-index` | Build project context for faster future work. |
 | Autonomous | `/cerebro-ultrawork [task]` | The task is clear and should be executed end to end. |
 | Planning | `/cerebro-plan [task]` | Requirements are complex, ambiguous, high-impact, or need approval. |
 | Execution | `/cerebro-start-work` | A plan exists and should be executed or resumed. |

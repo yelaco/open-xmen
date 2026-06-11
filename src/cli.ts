@@ -194,7 +194,7 @@ async function install(args: string[]) {
   console.log(`Installed ${skillCount} skill(s) into ${path.join(globalConfigDir, "skills")}.`);
   if (selection) console.log(`Model preset: ${selection.providers.join(" + ")} / ${selection.focus} (best model per agent across your subscription).`);
   if (resolvedMcp !== undefined) console.log(`MCP servers: ${resolvedMcp.length ? resolvedMcp.join(", ") : "none"}.`);
-  console.log("Next: restart OpenCode, then use `/cerebro-index`, `/cerebro-plan`, or `/cerebro-ultrawork`.");
+  console.log("Next: restart OpenCode, then use `/cerebro-plan`, `/cerebro-start-work`, or `/cerebro-ultrawork`.");
   return 0;
 }
 
