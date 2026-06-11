@@ -37,7 +37,7 @@ const requiredModelSlots = [
   ['fast', 'openai/gpt-5.4-mini-fast', 'CEREBRO_MODEL_FAST'],
   ['image', 'openai/gpt-image-2', 'CEREBRO_MODEL_IMAGE'],
 ];
-const expectedResolvedCommands = ['cerebro-index', 'cerebro-plan', 'cerebro-start-work', 'to-me-my-x-men'];
+const expectedResolvedCommands = ['cerebro-index', 'cerebro-plan', 'cerebro-start-work', 'cerebro-ultrawork'];
 const expectedResolvedAgents = [
   'cerebro',
   'legion',
@@ -244,7 +244,7 @@ function verifyFreshInstall(tarballPath: string) {
       const commandNames = Object.keys(config.command ?? {}).sort();
       const agentNames = Object.keys(config.agent ?? {}).sort();
       if (commandNames.length !== 4) throw new Error(\`Expected 4 commands, got \${commandNames.length}\`);
-      if (!commandNames.includes('cerebro-plan') || !commandNames.includes('to-me-my-x-men')) throw new Error('Missing preserved command registrations');
+      if (!commandNames.includes('cerebro-plan') || !commandNames.includes('cerebro-ultrawork')) throw new Error('Missing preserved command registrations');
       if (agentNames.length !== 13) throw new Error(\`Expected 13 agents, got \${agentNames.length}\`);
       if (!config.agent?.cerebro) throw new Error('Missing cerebro agent registration');
       if ('default_agent' in config) throw new Error('Plugin config hook should not force default_agent');

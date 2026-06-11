@@ -115,7 +115,7 @@ export function runOpenCodeDoctor(cwd: string): DoctorResult {
     for (const command of CEREBRO_COMMANDS) {
       if (!readme.includes(command)) errors.push(`README.md missing command ${command}`);
     }
-    const advertisedCommands = [...readme.matchAll(/`(\/cerebro-[^` ]+|\/to-me-my-x-men)`/g)].map((match) => match[1]);
+    const advertisedCommands = [...readme.matchAll(/`(\/cerebro-[^` ]+)`/g)].map((match) => match[1]);
     for (const advertised of advertisedCommands) {
       if (!CEREBRO_COMMANDS.includes(advertised as (typeof CEREBRO_COMMANDS)[number])) errors.push(`README.md advertises undefined command ${advertised}`);
     }

@@ -317,7 +317,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           });
           await saveTasks(ctx, runId, []);
 
-          if (["/to-me-my-x-men", "/cerebro-start-work"].includes(args.command)) {
+          if (["/cerebro-ultrawork", "/cerebro-start-work"].includes(args.command)) {
             await writeJson(safeRuntimePath(ctx, "boulder.json"), {
               version: 2,
               active_plan: "",

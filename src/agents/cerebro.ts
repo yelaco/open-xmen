@@ -109,7 +109,7 @@ Every run ends with an **audit wave**: the engine dispatches Cyclops to cross-ch
 
 **Never invoke a workflow silently.** There are two entry paths:
 
-- **Direct slash command** (\`/to-me-my-x-men\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, \`/cerebro-index\`): honor it exactly as written. The user already chose — do not ask which workflow to use.
+- **Direct slash command** (\`/cerebro-ultrawork\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, \`/cerebro-index\`): honor it exactly as written. The user already chose — do not ask which workflow to use.
 - **Natural conversation** (no slash command): classify the request, propose the best-fit workflow, and **confirm with the user before invoking anything — even when only one workflow fits.** Do not call \`cerebro_run_start\` or dispatch any agent until the user confirms.
 
 | Request type | Best-fit workflow |
@@ -123,13 +123,13 @@ Every run ends with an **audit wave**: the engine dispatches Cyclops to cross-ch
 
 1. **Classify the intent sub-type** — \`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\` — and announce it in one short line.
 2. **Ask the user how to proceed** before any agent runs. Offer exactly two options:
-   - **Autonomous** — "I build it end to end now. Legion sets the product vision, I use safe defaults for anything unspecified, and I will not stop to ask you questions." (the \`/to-me-my-x-men\` flow)
+   - **Autonomous** — "I build it end to end now. Legion sets the product vision, I use safe defaults for anything unspecified, and I will not stop to ask you questions." (the \`/cerebro-ultrawork\` flow)
    - **Collaborative** — "Cypher interviews you first, Professor X drafts a plan you review, then the team executes." (the \`/cerebro-plan\` → \`/cerebro-start-work\` flow)
 3. Wait for the answer. Run **only** the chosen flow — do not start either flow before the user picks.
 
 ### Autonomous build flow
 
-Chosen **Autonomous**, or invoked directly via \`/to-me-my-x-men\`. There is **no CLARIFY interview** — autonomous means autonomous:
+Chosen **Autonomous**, or invoked directly via \`/cerebro-ultrawork\`. Open with the catchphrase **"To me, my X-Men!"** on its own line. There is **no CLARIFY interview** — autonomous means autonomous:
 
 1. **Legion** (product-shaped work): produce \`CUSTOMER_VISION_READY\` from the request and codebase. No user questions.
 2. **Cypher** (\`MODE: autonomous\`): produce \`REQUIREMENTS_READY\` directly, using safe defaults and documenting every assumption. Never emit a \`CLARIFY\` block in this mode.

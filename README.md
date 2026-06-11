@@ -123,7 +123,7 @@ Then run the Cerebro workflow command you need inside OpenCode:
 For autonomous best-effort mode:
 
 ```text
-/to-me-my-x-men build the feature described in the current issue
+/cerebro-ultrawork build the feature described in the current issue
 ```
 
 ---
@@ -151,7 +151,7 @@ open-xmen models
 | `/cerebro-index` | Build `.cerebro/project-context.md` using Nightcrawler, Sage, Forge, and Beast. |
 | `/cerebro-plan [task]` | Interview-first planning with Professor X, Beast, and Emma Frost validation. |
 | `/cerebro-start-work` | Execute or resume the latest plan through the deterministic workflow engine, with a final Cyclops audit. |
-| `/to-me-my-x-men [task]` | Autonomous full-team mode with Legion + Cypher intent consult and final Legion acceptance — engine-executed, Cyclops-audited. |
+| `/cerebro-ultrawork [task]` | Autonomous full-team mode (opens with the "To me, my X-Men!" catchphrase) with Legion + Cypher intent consult and final Legion acceptance — engine-executed, Cyclops-audited. |
 
 ---
 

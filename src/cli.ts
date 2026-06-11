@@ -164,7 +164,7 @@ function install(args: string[]) {
   console.log("open-xmen install: PASS");
   console.log(`${options.global ? "Installed in OpenCode user config" : "Installed into"} ${options.target}`);
   if (!options.runtimeFiles) console.log("No .opencode/ or .cerebro/ files were written; commands and agents are provided by the plugin.");
-  console.log("Next: restart OpenCode, then use `/cerebro-index`, `/cerebro-plan`, or `/to-me-my-x-men`.");
+  console.log("Next: restart OpenCode, then use `/cerebro-index`, `/cerebro-plan`, or `/cerebro-ultrawork`.");
   return 0;
 }
 

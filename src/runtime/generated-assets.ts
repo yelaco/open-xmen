@@ -20,7 +20,7 @@ Open every Cerebro command with a short cinematic announcement, then move quickl
 - \`/cerebro-index\` — build or refresh \`.cerebro/project-context.md\`.
 - \`/cerebro-plan [task]\` — interview-first planning; write approved plans to \`.cerebro/plans/\`.
 - \`/cerebro-start-work\` — execute or resume the latest \`.cerebro/plans/*.md\`.
-- \`/to-me-my-x-men [task]\` — autonomous full-team mode; Legion/Cypher for product-shaped work, the workflow engine executes and Cyclops audits.
+- \`/cerebro-ultrawork [task]\` — autonomous full-team mode (opens with the "To me, my X-Men!" catchphrase); Legion/Cypher for product-shaped work, the workflow engine executes and Cyclops audits.
 
 ## Runtime
 
@@ -156,7 +156,7 @@ This runtime uses X-Men names for OpenCode specialist prompts. The names are par
 │   ├── cerebro-plan.md
 │   ├── cerebro-start-work.md
 │   ├── cerebro-index.md
-│   └── to-me-my-x-men.md
+│   └── cerebro-ultrawork.md
 └── plugins/
 
 .cerebro/
@@ -216,7 +216,7 @@ flowchart TB
 
 | Command | Purpose |
 |---|---|
-| \`/to-me-my-x-men [task]\` | Autonomous execution for clear tasks; asks before using Cerebro's own judgment on unclear product-shaped prompts. |
+| \`/cerebro-ultrawork [task]\` | Autonomous execution for clear tasks (opens with the "To me, my X-Men!" catchphrase); asks before using Cerebro's own judgment on unclear product-shaped prompts. |
 | \`/cerebro-index\` | Build or refresh repository context. |
 | \`/cerebro-plan [task]\` | Interview-first planning with Professor X. |
 | \`/cerebro-start-work\` | Execute or resume the latest Cerebro plan. |
@@ -272,11 +272,11 @@ Cerebro turns OpenCode into a coordinated X-Men-themed agent workflow using nati
 |---|---|---|
 | Simple | Ask normally | Explanation, small command, single obvious edit. |
 | New repo or stale context | \`/cerebro-index\` | Build \`.cerebro/project-context.md\` before planning or execution. |
-| Clear implementation | \`/to-me-my-x-men [task]\` | Clear goal, low/medium risk, no long interview needed. |
+| Clear implementation | \`/cerebro-ultrawork [task]\` | Clear goal, low/medium risk, no long interview needed. |
 | Complex or risky | \`/cerebro-plan [task]\` then \`/cerebro-start-work\` | Multi-step feature, architecture change, migration, security, data, production impact. |
 | Interrupted plan | \`/cerebro-start-work\` | Continue from \`.cerebro/boulder.json\`. |
 
-If the user explicitly invokes \`/to-me-my-x-men\` for ambiguous or product-shaped work, Cerebro asks only for blockers it cannot infer safely. Otherwise Legion and Cypher record assumptions in customer/requirements notepads before Professor X, Beast, Emma Frost, and the workers proceed.
+If the user explicitly invokes \`/cerebro-ultrawork\` for ambiguous or product-shaped work, Cerebro asks only for blockers it cannot infer safely. Otherwise Legion and Cypher record assumptions in customer/requirements notepads before Professor X, Beast, Emma Frost, and the workers proceed.
 
 ## Three-Layer Architecture
 
@@ -347,7 +347,7 @@ Legacy \`.claude/\` files may exist as migration source or compatibility materia
 ## Quick Start
 
 \`\`\`text
-/to-me-my-x-men add request validation to the API
+/cerebro-ultrawork add request validation to the API
 /cerebro-index
 /cerebro-plan redesign the authentication flow
 /cerebro-start-work
@@ -359,13 +359,13 @@ Legacy \`.claude/\` files may exist as migration source or compatibility materia
 |---|---|---|
 | Direct | Ask normally | The request is simple and low-risk. |
 | Index | \`/cerebro-index\` | Build project context for faster future work. |
-| Autonomous | \`/to-me-my-x-men [task]\` | The task is clear and should be executed end to end. |
+| Autonomous | \`/cerebro-ultrawork [task]\` | The task is clear and should be executed end to end. |
 | Planning | \`/cerebro-plan [task]\` | Requirements are complex, ambiguous, high-impact, or need approval. |
 | Execution | \`/cerebro-start-work\` | A plan exists and should be executed or resumed. |
 
 Package updates are npm-managed. Re-run \`bunx open-xmen@latest install\` to refresh the plugin config/cache without writing project runtime files. Use \`install --with-runtime-files --reset\` only when you intentionally want to refresh legacy managed \`.opencode/\`, \`.cerebro/\`, and \`AGENTS.md\` files.
 
-When \`/to-me-my-x-men\` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and the workflow engine executes the plan deterministically — parallel dependency frontiers, shell verification, bounded retries — with Cyclops auditing the final result.
+When \`/cerebro-ultrawork\` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and the workflow engine executes the plan deterministically — parallel dependency frontiers, shell verification, bounded retries — with Cyclops auditing the final result.
 
 ## Recommended Reading
 
@@ -665,7 +665,7 @@ Use \`orchestrator\` for Cerebro command interpretation, \`auditor\` for the fin
     },
     "command": {
       "type": "string",
-      "enum": ["/to-me-my-x-men", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index"]
+      "enum": ["/cerebro-ultrawork", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index"]
     },
     "status": {
       "type": "string",
@@ -1252,7 +1252,7 @@ REQUIRED_COMMANDS = {
     "cerebro-index",
     "cerebro-plan",
     "cerebro-start-work",
-    "to-me-my-x-men",
+    "cerebro-ultrawork",
 }
 MODEL_PATTERN = re.compile(r"(?:openai|anthropic|minimax)/[A-Za-z0-9._/-]+")
 REQUIRED_SLOTS = {
@@ -1379,7 +1379,7 @@ from pathlib import Path
 
 
 ALLOWED_COMMANDS = {
-    "/to-me-my-x-men",
+    "/cerebro-ultrawork",
     "/cerebro-plan",
     "/cerebro-start-work",
     "/cerebro-index",
@@ -2026,7 +2026,7 @@ Conservative, reversible choices made without explicit user input:
   { path: ".cerebro/templates/team-run.json", content: `{
   "version": 1,
   "run_id": "20260522-000000-example-run",
-  "command": "/to-me-my-x-men",
+  "command": "/cerebro-ultrawork",
   "status": "planning",
   "lead": "cerebro",
   "team_name": "replace-with-team-name",
@@ -2136,7 +2136,7 @@ Every run ends with an **audit wave**: the engine dispatches Cyclops to cross-ch
 
 **Never invoke a workflow silently.** There are two entry paths:
 
-- **Direct slash command** (\`/to-me-my-x-men\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, \`/cerebro-index\`): honor it exactly as written. The user already chose — do not ask which workflow to use.
+- **Direct slash command** (\`/cerebro-ultrawork\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, \`/cerebro-index\`): honor it exactly as written. The user already chose — do not ask which workflow to use.
 - **Natural conversation** (no slash command): classify the request, propose the best-fit workflow, and **confirm with the user before invoking anything — even when only one workflow fits.** Do not call \`cerebro_run_start\` or dispatch any agent until the user confirms.
 
 | Request type | Best-fit workflow |
@@ -2150,13 +2150,13 @@ Every run ends with an **audit wave**: the engine dispatches Cyclops to cross-ch
 
 1. **Classify the intent sub-type** — \`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\` — and announce it in one short line.
 2. **Ask the user how to proceed** before any agent runs. Offer exactly two options:
-   - **Autonomous** — "I build it end to end now. Legion sets the product vision, I use safe defaults for anything unspecified, and I will not stop to ask you questions." (the \`/to-me-my-x-men\` flow)
+   - **Autonomous** — "I build it end to end now. Legion sets the product vision, I use safe defaults for anything unspecified, and I will not stop to ask you questions." (the \`/cerebro-ultrawork\` flow)
    - **Collaborative** — "Cypher interviews you first, Professor X drafts a plan you review, then the team executes." (the \`/cerebro-plan\` → \`/cerebro-start-work\` flow)
 3. Wait for the answer. Run **only** the chosen flow — do not start either flow before the user picks.
 
 ### Autonomous build flow
 
-Chosen **Autonomous**, or invoked directly via \`/to-me-my-x-men\`. There is **no CLARIFY interview** — autonomous means autonomous:
+Chosen **Autonomous**, or invoked directly via \`/cerebro-ultrawork\`. Open with the catchphrase **"To me, my X-Men!"** on its own line. There is **no CLARIFY interview** — autonomous means autonomous:
 
 1. **Legion** (product-shaped work): produce \`CUSTOMER_VISION_READY\` from the request and codebase. No user questions.
 2. **Cypher** (\`MODE: autonomous\`): produce \`REQUIREMENTS_READY\` directly, using safe defaults and documenting every assumption. Never emit a \`CLARIFY\` block in this mode.
@@ -2398,7 +2398,7 @@ You are Cypher, requirements analyst. Convert intent into structured requirement
 
 Cerebro passes you the user's request, a classified intent sub-type, and a mode:
 
-- **\`autonomous\`** — called from \`/to-me-my-x-men\`. Produce REQUIREMENTS_READY directly. Use safe defaults for anything non-inferable. Document every assumption. Do not ask any questions.
+- **\`autonomous\`** — called from \`/cerebro-ultrawork\`. Produce REQUIREMENTS_READY directly. Use safe defaults for anything non-inferable. Document every assumption. Do not ask any questions.
 - **\`interactive\`** — called from \`/cerebro-plan\`. Run an iterative interview loop: produce a prioritized question list → Cerebro collects user answers → you evaluate → repeat until confident. Maximum 3 rounds; use safe defaults on round 3.
 
 ## Interview Protocol (interactive mode only)
@@ -2943,7 +2943,7 @@ Execute or resume the latest Cerebro plan.
 10. **Legion acceptance** (product-shaped plans only): if the plan includes user-facing acceptance criteria or was derived from Legion/Cypher notepads, run Legion through \`cerebro_agent_task\` for a final customer acceptance verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks via \`cerebro_task_create\` and re-runs \`cerebro_execute_workflow\` before the run completes.
 11. Call \`cerebro_verify_pending\`; do not final-report while pending todos remain.
 12. Final report: plan path, files changed, tests run, verification evidence, audit verdict and findings, Legion verdict (if run), unresolved issues, workflow problem list path, rollback notes, and checkpoint paths.` },
-  { path: ".opencode/commands/to-me-my-x-men.md", content: `---
+  { path: ".opencode/commands/cerebro-ultrawork.md", content: `---
 description: Fully autonomous Cerebro full-team mode. One prompt in, complete result out — no user interaction after trigger.
 agent: cerebro
 model: openai/gpt-5.5
@@ -2956,8 +2956,8 @@ The user has given one prompt and expects a complete result with no further ques
 
 ## Required flow
 
-1. Announce maximum Cerebro power and the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`).
-2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/to-me-my-x-men\` and classified risk.
+1. Open with the exact catchphrase on its own line — **"To me, my X-Men!"** — then state the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`) in one short line.
+2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-ultrawork\` and classified risk.
 3. Emit visible progress milestones with \`cerebro_progress\` whenever the run enters a new phase or a batch of work starts/completes.
 4. **Legion** (product-shaped work only): run Legion through \`cerebro_agent_task\` to produce customer vision from the prompt and codebase. Legion writes \`CUSTOMER_VISION_READY\` under \`.cerebro/notepads/customer/\` — no user questions.
 5. **Cypher** (\`MODE: autonomous\`): run Cypher through \`cerebro_agent_task\` with the original prompt, intent sub-type, Legion's vision (if produced), and \`MODE: autonomous\`. Cypher produces \`REQUIREMENTS_READY\` directly — using safe defaults and documenting all assumptions. No CLARIFY rounds.
@@ -2975,7 +2975,7 @@ Final report: assumptions made, files changed, tests/verification, audit verdict
 This project uses the Cerebro workflow on OpenCode.
 
 - Primary runtime state lives under \`.cerebro/\`.
-- Use OpenCode commands \`/cerebro-index\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, and \`/to-me-my-x-men\` for non-trivial work.
+- Use OpenCode commands \`/cerebro-index\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, and \`/cerebro-ultrawork\` for non-trivial work.
 - Preserve Cerebro role names: Legion, Cypher, Professor X, Cyclops, Wolverine, Storm, Forge, Nightcrawler, Sage, Beast, and Emma Frost.
 - Plan execution runs through the deterministic \`cerebro_execute_workflow\` engine; agents never hand-roll dispatch loops. Cyclops audits the finished run.
 - OpenCode does not provide Claude Code native team APIs; use Cerebro custom tools and OpenCode subagents/child sessions for coordination.

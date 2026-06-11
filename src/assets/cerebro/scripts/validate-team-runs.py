@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ALLOWED_COMMANDS = {
-    "/to-me-my-x-men",
+    "/cerebro-ultrawork",
     "/cerebro-plan",
     "/cerebro-start-work",
     "/cerebro-index",

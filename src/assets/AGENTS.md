@@ -3,7 +3,7 @@
 This project uses the Cerebro workflow on OpenCode.
 
 - Primary runtime state lives under `.cerebro/`.
-- Use OpenCode commands `/cerebro-index`, `/cerebro-plan`, `/cerebro-start-work`, and `/to-me-my-x-men` for non-trivial work.
+- Use OpenCode commands `/cerebro-index`, `/cerebro-plan`, `/cerebro-start-work`, and `/cerebro-ultrawork` for non-trivial work.
 - Preserve Cerebro role names: Legion, Cypher, Professor X, Cyclops, Wolverine, Storm, Forge, Nightcrawler, Sage, Beast, and Emma Frost.
 - Plan execution runs through the deterministic `cerebro_execute_workflow` engine; agents never hand-roll dispatch loops. Cyclops audits the finished run.
 - OpenCode does not provide Claude Code native team APIs; use Cerebro custom tools and OpenCode subagents/child sessions for coordination.
