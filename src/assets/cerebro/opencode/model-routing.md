@@ -2,7 +2,13 @@
 
 This runtime uses one canonical role-slot table. Agent frontmatter, `cerebro_model_slots`, command defaults, docs, and validators must agree with these slots.
 
-## Primary Model Table
+## Provider Presets
+
+`open-xmen install` asks which model subscription(s) you have (OpenAI, Anthropic, or both — multi-select) and a focus (**performance / balance / cost**), then writes `~/.config/opencode/open-xmen.json` (e.g. `{ "providers": ["anthropic"], "focus": "balance" }`). The plugin reads it at load and picks, **per slot, the best model for that agent's job across the subscriptions you actually own** — so with both providers you get genuine best-of-breed (e.g. Claude Opus for the auditor, GPT-5.5 for coding), and with one you get the best available within it.
+
+Resolution order per slot: `CEREBRO_MODEL_<SLOT>` env override → legacy env → installed preset → built-in default (the table below). Image generation is OpenAI-only (Anthropic has no image model), so the image slot always resolves to `openai/gpt-image-2`.
+
+## Default Model Table (no preset configured — OpenAI / balance baseline)
 
 | Slot | Default model | Variant | Agents |
 |---|---|---|---|

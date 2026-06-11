@@ -21,6 +21,22 @@ export function globalOpenCodeConfigDir() {
   return path.join(configHome, "opencode");
 }
 
+// Persists the model preset selection so the plugin can pick the slot→model mapping at load.
+export function writeOpenXmenPreset(
+  globalConfigDir: string,
+  selection: { providers: string[]; focus: string },
+  opts: { dryRun: boolean; planned: string[] },
+) {
+  const destination = path.join(globalConfigDir, "open-xmen.json");
+  const content = `${JSON.stringify({ providers: selection.providers, focus: selection.focus }, null, 2)}\n`;
+  if (opts.dryRun) {
+    opts.planned.push(`${existsSync(destination) ? "update" : "write"} ${destination} (providers=${selection.providers.join("+")}, focus=${selection.focus})`);
+    return;
+  }
+  mkdirSync(path.dirname(destination), { recursive: true });
+  writeFileSync(destination, content, "utf8");
+}
+
 export function updateOpencodeConfig(target: string, opts: UpdateOpenCodeConfigOptions) {
   const destination = path.join(target, "opencode.jsonc");
   let parsed: JsonValue = {};

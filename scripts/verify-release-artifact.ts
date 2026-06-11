@@ -173,8 +173,21 @@ function verifyFreshInstall(tarballPath: string) {
     const installedSkill = path.join(opencodeConfigDir, 'skills', 'opx-frontend-design', 'SKILL.md');
     if (!existsSync(installedSkill)) fail(`Default install did not install the global skill at ${installedSkill}`);
     if (!readFileSync(installedSkill, 'utf8').includes('name: opx-frontend-design')) fail('Installed skill SKILL.md missing namespaced name frontmatter');
+    if (existsSync(path.join(opencodeConfigDir, 'open-xmen.json'))) fail('Non-interactive default install should not write a model preset');
     verifyResolvedOpenCodeRuntime(defaultProjectDir, isolatedOpenCodeEnv);
     run('node', [cliPath, 'doctor', '--dir', defaultProjectDir], { cwd: packageDir, env: isolatedOpenCodeEnv });
+
+    console.log('Running model preset smoke (anthropic / performance)...');
+    run('node', [cliPath, 'install', '--provider', 'anthropic', '--focus', 'performance', '--no-deps'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv });
+    const presetFile = path.join(opencodeConfigDir, 'open-xmen.json');
+    if (!existsSync(presetFile)) fail('Preset install did not write open-xmen.json');
+    const preset = JSON.parse(readFileSync(presetFile, 'utf8'));
+    if (!Array.isArray(preset.providers) || !preset.providers.includes('anthropic') || preset.focus !== 'performance') {
+      fail(`open-xmen.json preset content incorrect: ${JSON.stringify(preset)}`);
+    }
+    const modelsOut = run('node', [cliPath, 'models'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv });
+    if (!modelsOut.includes('anthropic/claude-opus-4-8')) fail(`models did not reflect the anthropic preset:\n${modelsOut}`);
+    if (modelsOut.includes('"workers": "openai')) fail('anthropic-only preset should not select an OpenAI worker model');
 
     console.log('Running installed CLI plugin-only smoke install...');
     run('node', [cliPath, 'install', '--dir', projectDir, '--no-deps'], { cwd: packageDir });

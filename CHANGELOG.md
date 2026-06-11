@@ -12,6 +12,7 @@ The rebirth release: orchestration moves out of prompts and into the plugin runt
 - Workers may report a `GOTCHAS:` section in `TASK_RESULT`; the engine harvests it into `.cerebro/notepads/{run_id}/gotchas.md` and forwards it to later workers.
 - Bundled `opx-frontend-design` skill for distinctive, non-generic frontend aesthetics. `open-xmen install` writes it to the global OpenCode skills dir (`~/.config/opencode/skills/opx-frontend-design/SKILL.md`) so OpenCode discovers it; plugin skills use an `opx-` namespace prefix. Jean Grey and Storm have `skill: allow` and reference it for UI work; it remains an optional overlay.
 - Removed the `--with-runtime-files` install path. Open X-Men is plugin-only: commands and agents register through the plugin, and skills install globally. `.cerebro/` docs/templates/schemas are now repo-internal references, not shipped into projects.
+- Provider model presets. `install` offers an interactive multi-select for your model subscription(s) (OpenAI / Anthropic) plus a focus (performance / balance / cost), or accepts `--provider <list>` / `--focus <name>` non-interactively. The choice is saved to `~/.config/opencode/open-xmen.json` and the plugin resolves, per slot, the best model for that agent's job across the subscriptions you own (image stays OpenAI-only). `CEREBRO_MODEL_*` env vars still override individual slots.
 - `bun test` suite covering the scheduler, router, verifier, result parsers, and engine loop.
 
 ### Changed

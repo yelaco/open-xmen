@@ -38,7 +38,11 @@ Everything that matters is preserved: `.cerebro/` runtime state, the four slash 
 
 ## Model Routing
 
-Open X-Men uses canonical role-based model slots. Agent frontmatter, `cerebro_model_slots`, command defaults, and `.cerebro/opencode/model-routing.md` are expected to agree.
+Open X-Men uses canonical role-based model slots. Each agent runs on the slot that fits its work.
+
+**Provider presets.** `install` asks which model subscription(s) you have (OpenAI, Anthropic, or both — a multi-select) and a focus (**performance / balance / cost**), then picks **the best model per agent across the subscriptions you own**: with both providers you get genuine best-of-breed (Claude Opus for the auditor/planner/design, GPT-5.5 for coding), and with one you get the best available within it. The choice is saved to `~/.config/opencode/open-xmen.json` and read by the plugin at load. Image generation is OpenAI-only, so the image slot always uses `openai/gpt-image-2`.
+
+The default mapping (no preset configured — OpenAI / balance baseline):
 
 | Slot | Default model | Roles |
 |---|---|---|
@@ -51,7 +55,9 @@ Open X-Men uses canonical role-based model slots. Agent frontmatter, `cerebro_mo
 | `fast` | `openai/gpt-5.4-mini-fast` | Nightcrawler, Sage |
 | `image` | `openai/gpt-image-2` | image/design asset generation only |
 
-Override with environment variables if your available models change:
+Set the preset non-interactively with flags (skips the prompt): `open-xmen install --provider anthropic --focus balance` or `--provider openai,anthropic --focus performance` (`--provider all` selects every provider).
+
+Override an individual slot with environment variables (these win over the preset):
 
 ```bash
 export CEREBRO_MODEL_ORCHESTRATOR="openai/gpt-5.5"
