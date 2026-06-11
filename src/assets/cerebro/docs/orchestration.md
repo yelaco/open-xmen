@@ -55,11 +55,11 @@ Workers own their domain and return `TASK_RESULT` with files changed, tests run,
 
 ### Audit (Cyclops)
 
-When every task is done and verified, Cerebro calls `cerebro_audit`, which dispatches Cyclops once as the final quality gate. Cyclops inspects the diff, cross-checks verification evidence against the plan's acceptance criteria, and hunts scope creep, missed work, and test gaps. It rules `AUDIT_PASSED` or `AUDIT_FAILED` with a structured JSON findings array; failures become problem records, and retriable findings are re-queued by Cerebro for another pass.
+When every task is done and verified, Cerebro spawns Cyclops once via the native `task` tool (`subagent_type: cyclops`) as the final quality gate — a visible session like any other. Cyclops inspects the diff, cross-checks verification evidence against the plan's acceptance criteria, and hunts scope creep, missed work, and test gaps. It ends with `AUDIT_PASSED` or `AUDIT_FAILED` plus findings; Cerebro reads the verdict, records findings as problems (`cerebro_problem_report`), and re-queues retriable ones for another pass.
 
 ## Verification Standard
 
-Worker self-report is not enough. The engine runs the plan's verification commands itself after each `TASK_RESULT`, records PASS/FAIL with captured output on the task ledger, and routes failures back to the responsible worker. Cyclops then independently audits the final state before the run can complete. Final synthesis happens only after `cerebro_verify_pending` confirms task-scoped todos are clear or explicitly blocked.
+Worker self-report is not enough. Cerebro runs the plan's verification commands via `cerebro_verify` after each task, records PASS/FAIL with captured output on the task ledger, and routes failures back to the responsible worker. Cyclops then independently audits the final state before the run can complete. Final synthesis happens only after `cerebro_verify_pending` confirms task-scoped todos are clear or explicitly blocked.
 
 ## Multi-Model Resilience
 

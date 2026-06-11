@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Audit via the native task tool; removed `cerebro_audit`, `cerebro_progress`, and the last of the
+  child-session machinery.** Cerebro now spawns Cyclops for the final audit with the `task` tool
+  (`subagent_type: cyclops`) like every other agent — so the audit is a **visible session** too — and
+  reads the `AUDIT_PASSED`/`AUDIT_FAILED` verdict from the reply, recording findings via
+  `cerebro_problem_report`. This removed the last consumer of the `SessionRunner`, so `sessions.ts`
+  (dispatch/poll/marker machinery) is **deleted**. Also removed `cerebro_progress` /
+  `cerebro_progress_read` (live status is covered by narration + visible windows; nothing read the
+  progress log) and the now-dead result parsers (`parseAuditVerdict`, `summarizeTaskResult`,
+  `parseGotchas`, `parseDesignSpecPath`, child-session helpers). Net: one spawning mechanism, fewer
+  tools, less code; determinism still lives in `cerebro_verify` (real shell) and `cerebro_next_tasks`.
 - **Autonomous runs go non-stop.** Raised the orchestrator's step budget (Cerebro `steps` 60 → 1000)
   and the worker budget (60 → 200). A full autonomous build (plan → assess → many spawn/verify
   cycles → audit → report) was exhausting Cerebro's 60-step turn limit and halting partway with

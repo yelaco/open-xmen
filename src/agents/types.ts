@@ -4,7 +4,7 @@ export const CEREBRO_RUNTIME_CONTRACT = `## Cerebro Runtime Contract
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files.
+- Narrate each major phase change to the user in plain language so they can follow the work without reading run files; never go silent.
 - Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
 - Spawn specialists with the native \`task\` tool (\`subagent_type\` = the agent name); each runs in its own visible session and returns its result when done. Cerebro drives the orchestration loop — scheduling with \`cerebro_next_tasks\` and verifying each task with \`cerebro_verify\`.
 - Preserve command names and role names.

@@ -28,7 +28,7 @@ flowchart TB
         Dispatch --> WV["deep/quick/default:\nWolverine"]
         WJ & FG & NC & SG & WV --> Verify["cerebro_verify\n(real shell PASS/FAIL →\nonly path to verified)"]
         Verify -->|"FAIL (≤2 retries)"| Frontier
-        Verify -->|"all tasks verified"| Audit["cerebro_audit — Cyclops\ndiff + evidence + criteria"]
+        Verify -->|"all tasks verified"| Audit["Cyclops audit (task tool)\ndiff + evidence + criteria"]
     end
 
     Audit -->|"AUDIT_PASSED"| State[".cerebro/boulder.json\n+ team ledgers + notepads"]
@@ -62,8 +62,7 @@ flowchart TB
 | `.cerebro/boulder.json` | Cerebro | Business-level execution checkpoint: active plan, overall status, approvals, verification history, and decisions. Task progress lives in `.cerebro/team-runs/{run-id}.tasks.json`. |
 | `.cerebro/team-runs/{run-id}.json` | Cerebro | Run manifest for command, team name, teammates, approvals, mailbox decisions, verification, and cleanup. |
 | `.cerebro/team-runs/{run-id}.tasks.json` | Cerebro | OpenCode-managed task ledger updated by `cerebro_task_create/list/update` and `cerebro_verify`; task records created from plans must include category, dependencies, files, and verification commands. |
-| `.cerebro/team-runs/{run-id}.mailbox.jsonl` | Cerebro team | Mailbox log written by `cerebro_mailbox_send` and the Cyclops audit dispatch (`cerebro_audit`); read by `cerebro_mailbox_read`. |
-| `.cerebro/team-runs/{run-id}.progress.jsonl` | Cerebro team | User-visible progress events and low-frequency heartbeats emitted while blocking collection is still running. |
+| `.cerebro/team-runs/{run-id}.mailbox.jsonl` | Cerebro team | Mailbox log written by `cerebro_mailbox_send`; read by `cerebro_mailbox_read`. |
 | `.cerebro/team-runs/{run-id}.problems.jsonl` | Cerebro team | Structured problem list for blockers, failed verification, runtime gaps, weak evidence, and workflow UX issues discovered during the run. |
 | `.cerebro/team-runs/{run-id}.checkpoints.jsonl` | Cerebro team | Durable checkpoints written by `cerebro_checkpoint`. |
 | `.cerebro/notepads/{plan}/conventions.md` | Cerebro | Coding patterns, naming, file structure, UI patterns. |

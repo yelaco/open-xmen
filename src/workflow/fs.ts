@@ -60,10 +60,6 @@ export function manifestFile(ctx: RuntimeContext, runId: string) {
   return safeRuntimePath(ctx, `team-runs/${runId}.json`);
 }
 
-export function progressFile(ctx: RuntimeContext, runId: string) {
-  return safeRuntimePath(ctx, `team-runs/${runId}.progress.jsonl`);
-}
-
 export function problemsFile(ctx: RuntimeContext, runId: string) {
   return safeRuntimePath(ctx, `team-runs/${runId}.problems.jsonl`);
 }

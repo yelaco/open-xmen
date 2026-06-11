@@ -17,14 +17,14 @@ Cerebro (primary agent — drives the loop, narrates every step)
         spawn specialists   → native task tool (visible sessions, parallel)
         cerebro_verify      → real shell PASS/FAIL  ← the only path to "verified"
         retry on FAIL or mark blocked; repeat until nothing is ready
-  Phase 4 Independent Verif.  → cerebro_audit (Cyclops) → cerebro_run_report
+  Phase 4 Independent Verif.  → spawn Cyclops (task tool) for the audit → cerebro_run_report
   Session Continuity          → ledger + boulder.json; resume from where you stopped
 ```
 
 Three principles:
 
 - **The model conducts.** Cerebro spawns specialists and drives the loop, reporting each decision, finding, and result — never a black box.
-- **Determinism lives in tools.** `cerebro_next_tasks` schedules deterministically (no invented ordering), `cerebro_verify` runs real shell checks (the only path to `verified`), and `cerebro_audit` is the Cyclops gate.
+- **Determinism lives in tools.** `cerebro_next_tasks` schedules deterministically (no invented ordering) and `cerebro_verify` runs real shell checks (the only path to `verified`); the final Cyclops audit is an independent read-only gate.
 - **The auditor signs off.** Cyclops independently cross-checks the finished run before it can be declared complete.
 
 Everything that matters is preserved: `.cerebro/` runtime state, the four slash commands, and the X-Men role names.

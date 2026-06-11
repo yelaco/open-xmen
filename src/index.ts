@@ -23,7 +23,7 @@ import {
 } from "./agents/index.js";
 import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
 import { CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
-import { AGENT_MODEL_SLOTS, CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, OPTIONAL_MCP_SERVERS, enabledMcpServers, modelSlots } from "./config/models.js";
+import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, OPTIONAL_MCP_SERVERS, enabledMcpServers, modelSlots } from "./config/models.js";
 import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent } from "./auto-update.js";
 import type { TaskRecord, TaskStatus } from "./workflow/types.js";
 import {
@@ -36,7 +36,6 @@ import {
   manifestFile,
   now,
   problemsFile,
-  progressFile,
   readJson,
   safeRuntimePath,
   saveTasks,
@@ -44,12 +43,8 @@ import {
   verificationLogFile,
   writeJson,
 } from "./workflow/fs.js";
-import {
-  isRecord,
-  parseAuditVerdict,
-} from "./workflow/results.js";
+import { isRecord } from "./workflow/results.js";
 import { createEventRecorder } from "./workflow/events.js";
-import { createSessionRunner } from "./workflow/sessions.js";
 import { runVerificationCommands } from "./workflow/verify.js";
 import { summarizeLedger } from "./workflow/scheduler.js";
 import { routeReadyBatch } from "./workflow/orchestrate.js";
@@ -192,15 +187,14 @@ async function scanPendingTodos(root: string, teamName?: string) {
 }
 
 export const CerebroPlugin: Plugin = async (input) => {
-  const { worktree, directory, client } = input;
+  const { worktree, directory } = input;
   const ctx = { worktree, directory };
   let sessionCheckDone = false;
   let autoUpdateScheduled = false;
 
   // One mutex shared by every ledger writer (tools and engine) so load→mutate→save cycles never interleave.
   const mutex = createTaskMutex();
-  const events = createEventRecorder(ctx, mutex);
-  const sessions = createSessionRunner(client, ctx, events);
+  const events = createEventRecorder(ctx);
   const { recordProgress, recordProblem } = events;
 
   return {
@@ -356,7 +350,7 @@ export const CerebroPlugin: Plugin = async (input) => {
             message: `${args.command} — ${args.objective}`,
           }, toolContext);
 
-          return JSON.stringify({ run_id: runId, manifest: `.cerebro/team-runs/${runId}.json`, tasks: `.cerebro/team-runs/${runId}.tasks.json`, progress: `.cerebro/team-runs/${runId}.progress.jsonl`, problems: `.cerebro/team-runs/${runId}.problems.jsonl` }, null, 2);
+          return JSON.stringify({ run_id: runId, manifest: `.cerebro/team-runs/${runId}.json`, tasks: `.cerebro/team-runs/${runId}.tasks.json`, problems: `.cerebro/team-runs/${runId}.problems.jsonl` }, null, 2);
         },
       }),
 
@@ -500,49 +494,6 @@ export const CerebroPlugin: Plugin = async (input) => {
             .filter((record) => !args.to || record.to === args.to)
             .slice(-(args.limit || 50));
           return JSON.stringify(records, null, 2);
-        },
-      }),
-
-      cerebro_progress: tool({
-        description: "Emit a visible Cerebro progress milestone for the current run. Use this at major orchestration points so users can see what is happening without reading mailbox files.",
-        args: {
-          run_id: tool.schema.string().min(1),
-          phase: tool.schema.string().min(1).describe("Short phase label, e.g. planning, dispatch, verification, retry, complete"),
-          message: tool.schema.string().min(1),
-          status: tool.schema.enum(["started", "running", "completed", "blocked", "failed", "info"]).optional(),
-          task_id: tool.schema.string().optional(),
-          agent: tool.schema.string().optional(),
-          detail: tool.schema.string().optional(),
-        },
-        async execute(args, toolContext) {
-          const record = await recordProgress(args.run_id, args, toolContext);
-          return {
-            title: `${record.status.toUpperCase()} ${record.phase}: ${record.message}`,
-            output: JSON.stringify(record, null, 2),
-            metadata: record,
-          };
-        },
-      }),
-
-      cerebro_progress_read: tool({
-        description: "Read a concise progress summary for a Cerebro run. Use when the user asks what the X-Men are doing or wants current progress.",
-        args: {
-          run_id: tool.schema.string().min(1),
-          limit: tool.schema.number().int().min(1).max(100).optional(),
-        },
-        async execute(args) {
-          const file = progressFile(ctx, args.run_id);
-          if (!existsSync(file)) return "No progress events recorded yet.";
-          const records = (await readFile(file, "utf8"))
-            .split("\n")
-            .filter(Boolean)
-            .flatMap((line) => { try { return [JSON.parse(line) as { at?: string; status?: string; phase?: string; message?: string; task_id?: string; agent?: string }]; } catch { return []; } })
-            .slice(-(args.limit ?? 30));
-          return records.map((record) => {
-            const task = record.task_id ? ` [${record.task_id}]` : "";
-            const agent = record.agent ? ` @${record.agent}` : "";
-            return `- ${record.at ?? ""} ${record.status ?? "info"} ${record.phase ?? "progress"}${task}${agent}: ${record.message ?? ""}`;
-          }).join("\n") || "No progress events recorded yet.";
         },
       }),
 
@@ -723,70 +674,6 @@ export const CerebroPlugin: Plugin = async (input) => {
             detail: outcome.failureOutput?.slice(0, 500),
           }, toolContext);
           return JSON.stringify({ result: outcome.result, task_id: task.id, failureOutput: outcome.failureOutput }, null, 2);
-        },
-      }),
-
-      cerebro_audit: tool({
-        description: "Run the final Cyclops audit for a run: dispatches Cyclops (read-only) to cross-check the diff, verification evidence, and acceptance criteria, and returns AUDIT_PASSED or AUDIT_FAILED with structured findings (recorded as problems). Call this once all tasks are verified, before declaring the run complete. AUDIT_FAILED findings with retriable + a task_id should be re-queued (cerebro_task_update → pending) and re-run.",
-        args: {
-          run_id: tool.schema.string().min(1),
-          plan_path: tool.schema.string().optional(),
-        },
-        async execute(args, toolContext) {
-          const tasks = await loadTasks(ctx, args.run_id);
-          const manifest = await readJson<{ objective?: string }>(manifestFile(ctx, args.run_id), {});
-          const problemsCount = existsSync(problemsFile(ctx, args.run_id))
-            ? (await readFile(problemsFile(ctx, args.run_id), "utf8")).split("\n").filter(Boolean).length
-            : 0;
-          const taskTable = tasks.map((task) => {
-            const verifications = task.verification.slice(-3).map((entry) => `${entry.result}: ${entry.command ?? "manual"}`).join("; ") || "none recorded";
-            return `- ${task.id} [${task.status}] (${task.owner}, ${task.attempts ?? 1} attempt(s)): ${task.subject}\n  files: ${(task.files ?? []).join(", ") || "undeclared"}\n  verification: ${verifications}`;
-          }).join("\n");
-          const prompt = [
-            `## Final Audit Request`, ``,
-            `RUN_ID: ${args.run_id}`,
-            `OBJECTIVE: ${manifest.objective ?? "(read the run manifest)"}`,
-            args.plan_path ? `PLAN: ${args.plan_path}` : `PLAN: locate the active plan under .cerebro/plans/`,
-            `TASK SUMMARIES:`, taskTable, ``,
-            `NOTEPADS: gotchas/verification/failures under .cerebro/notepads/${args.run_id}/ (if present)`,
-            `OPEN PROBLEM RECORDS: ${problemsCount} in .cerebro/team-runs/${args.run_id}.problems.jsonl`, ``,
-            `Every task above was executed and its verification commands were run by the orchestrator.`,
-            `You are the final gate: inspect the diff (git diff, git status), cross-check verification`,
-            `evidence against the plan's acceptance criteria, and hunt scope creep, missed work, and test gaps.`, ``,
-            `End your reply with exactly one verdict: a line containing only AUDIT_PASSED, or a line`,
-            `containing only AUDIT_FAILED followed by a fenced \`\`\`json array of findings, each with`,
-            `severity (critical|major|minor), task_id (or null), criterion, evidence, recommendation, and retriable (true|false).`,
-          ].join("\n");
-          await recordProgress(args.run_id, { phase: "audit", status: "running", message: "Cyclops audit started", agent: "cyclops" }, toolContext);
-          const dispatched = await sessions.dispatch({ run_id: args.run_id, agent: "cyclops", description: "final run audit", prompt, model_slot: AGENT_MODEL_SLOTS.cyclops }, toolContext);
-          if (!dispatched.dispatched || !dispatched.child_session_id) {
-            await recordProblem(args.run_id, { title: "Cyclops audit could not be dispatched", severity: "warning", source: "cerebro_audit", agent: "cyclops", evidence: dispatched.error }, toolContext).catch(() => undefined);
-            return JSON.stringify({ verdict: "UNAVAILABLE", findings: [] }, null, 2);
-          }
-          const collected = await sessions.collect({ run_id: args.run_id, child_session_id: dispatched.child_session_id, agent: "cyclops", poll: true }, toolContext);
-          if (!collected.collected || !collected.output) {
-            await recordProblem(args.run_id, { title: "Cyclops audit result could not be collected", severity: "warning", source: "cerebro_audit", agent: "cyclops", evidence: "error" in collected ? collected.error : collected.message }, toolContext).catch(() => undefined);
-            return JSON.stringify({ verdict: "UNAVAILABLE", findings: [] }, null, 2);
-          }
-          const { verdict, findings } = parseAuditVerdict(collected.output);
-          await recordProgress(args.run_id, {
-            phase: "audit",
-            status: verdict === "AUDIT_PASSED" ? "completed" : "failed",
-            message: verdict === "AUDIT_PASSED" ? "AUDIT_PASSED" : `${verdict ?? "no verdict"}${findings.length ? ` with ${findings.length} finding(s)` : ""}`,
-            agent: "cyclops",
-          }, toolContext);
-          for (const finding of findings) {
-            await recordProblem(args.run_id, {
-              title: `Audit finding (${finding.severity}): ${finding.criterion ?? finding.evidence ?? "see audit output"}`,
-              severity: finding.severity === "minor" ? "warning" : "error",
-              source: "cyclops-audit",
-              task_id: finding.task_id ?? undefined,
-              agent: "cyclops",
-              evidence: finding.evidence,
-              recommendation: finding.recommendation,
-            }, toolContext).catch(() => undefined);
-          }
-          return JSON.stringify({ verdict: verdict ?? "UNAVAILABLE", findings }, null, 2);
         },
       }),
 

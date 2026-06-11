@@ -38,36 +38,3 @@ export type TaskRecord = {
   notes: string[];
   verification: Array<{ at: string; result: string; command?: string; notes?: string }>;
 };
-
-export type ChildSessionClient = {
-  session: {
-    create(input: {
-      body: { parentID?: string; title: string };
-      query?: { directory: string };
-    }): Promise<{ data?: { id?: string } | null; id?: string }>;
-    promptAsync(input: {
-      path: { id: string };
-      query?: { directory: string };
-      body: {
-        agent: string;
-        model?: { providerID: string; modelID: string };
-        noReply: boolean;
-        parts: Array<{ type: "text"; text: string }>;
-      };
-    }): Promise<unknown>;
-    prompt?(input: {
-      path: { id: string };
-      query?: { directory: string };
-      body: {
-        agent: string;
-        model?: { providerID: string; modelID: string };
-        noReply?: boolean;
-        parts: Array<{ type: "text"; text: string }>;
-      };
-    }): Promise<unknown>;
-    messages?(input: {
-      path: { id: string };
-      query?: { directory: string; limit?: number };
-    }): Promise<unknown>;
-  };
-};

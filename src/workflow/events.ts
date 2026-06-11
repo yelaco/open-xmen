@@ -1,8 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { appendJsonl, loadTasks, mailboxFile, now, problemsFile, progressFile, saveTasks } from "./fs.js";
-import type { TaskMutex } from "./fs.js";
-import { summarizeTaskResult } from "./results.js";
-import type { TaskResultSummary } from "./results.js";
+import { appendJsonl, now, problemsFile } from "./fs.js";
 import type { ProblemSeverity, ProblemStatus, ProgressStatus, RuntimeContext, ToolProgressContext } from "./types.js";
 
 export function setToolProgress(toolContext: ToolProgressContext | undefined, title: string, metadata?: Record<string, unknown>) {
@@ -11,13 +8,6 @@ export function setToolProgress(toolContext: ToolProgressContext | undefined, ti
   } catch {
     // Tool metadata is best-effort UI sugar; never fail workflow state updates.
   }
-}
-
-export function formatElapsed(milliseconds: number) {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
 export type ProgressEvent = {
@@ -47,13 +37,14 @@ export type ProblemRecord = ProblemInput & { id: string; at: string; severity: P
 export type EventRecorder = {
   recordProgress(runId: string, event: ProgressEvent, toolContext?: ToolProgressContext): Promise<ProgressRecord>;
   recordProblem(runId: string, problem: ProblemInput, toolContext?: ToolProgressContext): Promise<ProblemRecord>;
-  recordAgentResult(runId: string, agent: string, childSessionId: string, output: string, taskId?: string): Promise<TaskResultSummary>;
 };
 
-export function createEventRecorder(ctx: RuntimeContext, mutex: TaskMutex): EventRecorder {
+export function createEventRecorder(ctx: RuntimeContext): EventRecorder {
+  // Progress is surfaced as live tool status in the TUI (and Cerebro narrates each step itself);
+  // it is no longer persisted to a file, since nothing read it. Problems are still recorded to
+  // `{run}.problems.jsonl` because cerebro_run_report consolidates them.
   async function recordProgress(runId: string, event: ProgressEvent, toolContext?: ToolProgressContext): Promise<ProgressRecord> {
     const record: ProgressRecord = { at: now(), ...event, status: event.status ?? "info" };
-    await appendJsonl(progressFile(ctx, runId), record);
     const titlePrefix = record.status === "completed" ? "✓" : record.status === "failed" ? "✗" : record.status === "blocked" ? "!" : "→";
     setToolProgress(toolContext, `${titlePrefix} ${record.phase}: ${record.message}`, {
       run_id: runId,
@@ -94,32 +85,5 @@ export function createEventRecorder(ctx: RuntimeContext, mutex: TaskMutex): Even
     return record;
   }
 
-  async function recordAgentResult(runId: string, agent: string, childSessionId: string, output: string, taskId?: string): Promise<TaskResultSummary> {
-    const summary = summarizeTaskResult(output);
-    await appendJsonl(mailboxFile(ctx, runId), {
-      at: now(),
-      type: "agent_result",
-      from: agent,
-      to: "cerebro",
-      child_session_id: childSessionId,
-      task_id: taskId,
-      status: summary.status ?? "unknown",
-      summary: summary.summary,
-      body: output,
-    });
-
-    if (!taskId) return summary;
-    await mutex.serialize(runId, async () => {
-      const tasks = await loadTasks(ctx, runId);
-      const taskRecord = tasks.find((task) => task.id === taskId);
-      if (!taskRecord) throw new Error(`Unknown task ${taskId}`);
-      if (summary.status) taskRecord.status = summary.status;
-      taskRecord.notes.push(`${now()} ${agent} returned ${summary.status ?? "unparsed"} from child session ${childSessionId}${summary.summary ? `: ${summary.summary}` : ""}`);
-      taskRecord.updated_at = now();
-      await saveTasks(ctx, runId, tasks);
-    });
-    return summary;
-  }
-
-  return { recordProgress, recordProblem, recordAgentResult };
+  return { recordProgress, recordProblem };
 }
