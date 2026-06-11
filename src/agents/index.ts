@@ -16,7 +16,6 @@ export const CEREBRO_AGENTS = [
 
 export type { AgentDefinition, OpenCodeMeta, OpenCodePermissionLevel } from "./types.js";
 export { resolvePrompt, CEREBRO_RUNTIME_CONTRACT } from "./types.js";
-export { toOpenCodeMarkdown } from "./markdown.js";
 export { buildCerebroPrompt, createCerebroAgent, CEREBRO_PROMPT } from "./cerebro.js";
 export {
   createLegionAgent,

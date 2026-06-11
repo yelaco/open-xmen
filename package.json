@@ -2,6 +2,7 @@
   "name": "open-xmen",
   "version": "0.3.1",
   "description": "Cerebro/X-Men workflow for OpenCode: agent planning + deterministic TypeScript execution engine + Cyclops audit.",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "open-xmen": "dist/cli.js"
@@ -14,7 +15,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "generate-assets": "bun scripts/generate-assets.ts",

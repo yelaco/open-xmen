@@ -90,7 +90,7 @@ Do not implement the plan in this command.`,
 9. Update \`.cerebro/boulder.json\` with status, approvals, verification history, and decisions.
 10. **Legion acceptance** (product-shaped plans only): if the plan includes user-facing acceptance criteria or was derived from Legion/Cypher notepads, run Legion through \`cerebro_agent_task\` for a final customer acceptance verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks via \`cerebro_task_create\` and re-runs \`cerebro_execute_workflow\` before the run completes.
 11. Call \`cerebro_verify_pending\`; do not final-report while pending todos remain.
-12. Final report: plan path, files changed, tests run, verification evidence, audit verdict and findings, Legion verdict (if run), unresolved issues, workflow problem list path, rollback notes, and checkpoint paths.`,
+12. Final report: call \`cerebro_run_report\` for a consolidated task/problem summary, then report plan path, files changed, tests run, verification evidence, the engine's audit verdict and findings, Legion verdict (if run), unresolved issues (the report's blocked tasks + open blockers/errors), rollback notes, and checkpoint paths.`,
   },
   {
     name: "cerebro-ultrawork",
@@ -117,11 +117,6 @@ The user has given one prompt and expects a complete result with no further ques
 11. **Legion acceptance** (product-shaped work only): run Legion through \`cerebro_agent_task\` for a final customer verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks and re-runs \`cerebro_execute_workflow\`.
 12. Call \`cerebro_verify_pending\`; final-report only when todos are clear or explicitly blocked.
 
-Final report: assumptions made, files changed, tests/verification, audit verdict, customer verdict (if run), unresolved issues, workflow problem list path, \`.cerebro\` run paths.`,
+Final report: call \`cerebro_run_report\` for a consolidated task/problem summary, then report assumptions made, files changed, tests/verification, the engine's audit verdict, customer verdict (if run), unresolved issues (the report's blocked tasks + open blockers/errors), and \`.cerebro\` run paths.`,
   },
 ];
-
-/** Generate the OpenCode markdown for a command definition. */
-export function toOpenCodeCommandMarkdown(cmd: CommandDefinition): string {
-  return `---\ndescription: ${cmd.description}\nagent: cerebro\nmodel: ${cmd.model}\n---\n${cmd.content}`;
-}

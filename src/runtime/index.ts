@@ -23,14 +23,6 @@ export type RuntimeAsset = {
   content: string;
 };
 
-export function runtimeAssetMap() {
-  return new Map(runtimeAssets.map((asset) => [asset.path, asset.content]));
-}
-
-export function runtimeAssetPaths() {
-  return runtimeAssets.map((asset) => asset.path);
-}
-
 export function runtimeAssetsByPrefix(prefix: string) {
   return runtimeAssets.filter((asset) => asset.path.startsWith(prefix));
 }

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npx tsc -p tsconfig.json --noEmit
+
+      - name: Unit tests
+        run: bun test
+
+      # The committed bundle must match the source assets. Regenerate and fail if it drifted.
+      - name: Generated assets are up to date
+        run: |
+          npm run generate-assets
+          git diff --exit-code src/runtime/generated-assets.ts
+
+# Note: `npm run verify:release` (clean-room pack + install smoke) requires the `opencode`
+# CLI and is run via `prepublishOnly` at publish time, not in this PR gate.
