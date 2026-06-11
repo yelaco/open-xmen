@@ -380,7 +380,11 @@ Cerebro ships skills only as optional overlays — the base workflow never requi
 
 ## Bundled Skills
 
-- **\`opx-frontend-design\`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds). Both agents have \`skill: allow\`. Still optional: if the skill is absent, both fall back to their base prompts.
+- **\`opx-frontend-design\`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds).
+- **\`opx-git\`** — disciplined Git: atomic commits in the repo's own style, safe rebase/squash (never rewrite pushed history or force-push without approval), and history archaeology (blame/pickaxe/bisect). Wolverine uses it for commits and history work.
+- **\`opx-playwright\`** — real-browser automation and UI verification (rendering, interactions, responsive, accessibility, login flows, link health). Prefers the Playwright MCP server when available, else \`npx playwright\`. Wolverine uses it for end-to-end tests; Storm uses it to verify visual work.
+
+All three are optional: agents with \`skill: allow\` (Jean Grey, Storm, Wolverine) use them when present and fall back to their base prompts when absent.
 
 ## Rules
 
@@ -2817,6 +2821,7 @@ You are Storm, visual engineering specialist. You own the visual layer: CSS/styl
 
 - Follow Jean Grey's design spec when one exists. Deviation requires explicit approval.
 - Use the \`opx-frontend-design\` skill if it is available to raise the aesthetic bar: distinctive typography, a cohesive committed palette, high-impact motion, atmospheric backgrounds, and meticulous detail. Never ship generic "AI slop" styling (Inter/Roboto/Arial, purple-on-white gradients, cookie-cutter layouts). Match implementation complexity to the design's intended intensity.
+- Use the \`opx-playwright\` skill if it is available to verify your visual work in a real browser — rendering, every interaction state, responsive breakpoints, and accessibility. Capture screenshot evidence rather than claiming it looks right.
 - Maintain a task-scoped todo file under \`.cerebro/pending-todos/{team}/storm/{task-id}.txt\` when running inside a Cerebro task.
 - Do not mark yourself complete until all visual states, responsiveness, and accessibility styling have been applied.
 - Never claim visual verification happened unless you actually ran the dev server or inspected captured evidence.
@@ -2865,6 +2870,7 @@ permission:
   webfetch: ask
   task: deny
   todowrite: allow
+  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2875,6 +2881,8 @@ options:
 You are Wolverine, the sole implementation specialist. Own all feature logic, component structure, state management, event handling, API calls, tests, scripts, and bug fixes — backend and frontend alike. When building UI components, deliver correct structure, behavior, and semantics; do NOT apply visual styling (CSS classes, style props, animation). Storm owns the visual layer and will apply it after you finish.
 
 Use TDD when practical. Maintain task-scoped todos under .cerebro/pending-todos/{team}/{agent}/{task}.txt and remove them only as completed. Return a TASK_RESULT block with files changed, tests run, verification, and issues.
+
+When skills are available, use the \`opx-git\` skill for disciplined commits and history work (atomic commits, safe rebase — never rewrite pushed history or force-push without approval), and the \`opx-playwright\` skill to drive a real browser for end-to-end and UI verification.
 
 ## Cerebro Runtime Contract
 
@@ -3041,5 +3049,94 @@ Interpret creatively and make unexpected choices that feel genuinely designed fo
 **IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
 
 Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
+` },
+  { path: "skills/opx-git/SKILL.md", content: `---
+name: opx-git
+description: Disciplined Git workflows — atomic commits with repo-matched style, safe rebase/squash, and history archaeology (blame, pickaxe, bisect). Use when committing changes, cleaning up history, or investigating when/why/by-whom code changed.
+---
+
+This skill makes Git operations disciplined and reviewable. Use it whenever you commit, reshape history, or investigate the past. It never commits, pushes, or rewrites history on its own — it acts only on an explicit request, and history-rewriting or force-push is gated behind the user's approval.
+
+## 1. Read the repo before you act
+
+Gather context in parallel: \`git status\`, \`git diff\`, \`git diff --staged\`, and \`git log --oneline -30\`. Detect the merge base with \`git merge-base HEAD main\` (fall back to \`master\`).
+
+**Match the existing commit style** — infer it from the last ~30 commits, do not impose one:
+- *Semantic* (\`feat:\`, \`fix:\`, \`chore:\` …) only if the history clearly uses it.
+- *Plain* natural-language subjects if that dominates.
+- *Short* 1–3 word subjects if that is the norm.
+- Mirror the repo's language and capitalization conventions.
+
+## 2. Commit atomically
+
+Default to **multiple small commits**, not one large one. A change that spans different directories, component types, or independent concerns should be split so each commit is individually revertible and reviewable.
+
+- Rough floor: about \`ceil(files_changed / 3)\` commits for a multi-file change — but cohesion wins over arithmetic.
+- Keep tests with the implementation they cover; never split a test from its code.
+- Order dependency-first: utilities → models → services → API/UI → config.
+- If a single commit must touch many files, say in one sentence why they are one cohesive change.
+- Verify each staged set with \`git diff --staged --stat\` before committing.
+
+Avoid: one giant commit across unrelated files; grouping by file type instead of by feature; vague messages ("update stuff", "related changes").
+
+## 3. Reshape history safely
+
+- **Never rewrite history that has been pushed or shared without explicit user approval**, and **never rebase \`main\`/\`master\`**.
+- Interactive squash/reorder: \`git rebase -i <base>\`; apply fixups with \`GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash\`.
+- Create fixups with \`git commit --fixup <sha>\` so autosquash can fold them.
+- Resolve conflicts by editing, \`git add\` the resolved files, then \`git rebase --continue\`.
+- Force-push only with \`--force-with-lease\`, never a bare \`--force\`, and only after approval.
+
+## 4. Investigate history (archaeology)
+
+- *When was a string added/removed?* pickaxe: \`git log -S"<string>" --oneline\` (use \`-G"<regex>"\` to match diff patterns).
+- *Who wrote this line and when?* \`git blame -L <start>,<end> <file>\`.
+- *Which commit introduced a bug?* \`git bisect start\` / \`good\` / \`bad\` to binary-search.
+- *Full history of a file across renames?* \`git log --follow -- <file>\`.
+
+## Output
+
+When run inside a Cerebro task, fold the result into your \`TASK_RESULT\` (commits created, history actions taken with their approval, or findings). Respect plan approval gates for any destructive or history-rewriting action.
+` },
+  { path: "skills/opx-playwright/SKILL.md", content: `---
+name: opx-playwright
+description: Browser automation and UI verification with Playwright — test pages, fill forms, take screenshots, check responsive layouts, validate UX, exercise login flows, and check links. Prefers the Playwright MCP server when available; otherwise runs npx playwright scripts.
+---
+
+This skill drives a real browser to verify and automate UI work: rendering, interactions, responsive behavior, accessibility, login flows, and link health. Use it to *prove* a UI change works rather than asserting it does.
+
+## CRITICAL: detect the server first
+
+Before navigating, find the running app. Check common dev ports (\`3000\`, \`5173\`, \`8080\`, \`4321\`, \`1313\`, …) or start the project's dev server if none is up. Never assume a URL — confirm it responds, then parameterize it (don't hard-code) so the same script works across environments.
+
+## Preferred path: Playwright MCP server
+
+If Playwright MCP browser tools are available in the session (e.g. \`browser_navigate\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_take_screenshot\`, \`browser_resize\`, \`browser_console_messages\`), use them directly — they give structured page state and are the cleanest way to drive the browser inside OpenCode:
+
+1. \`browser_navigate\` to the detected URL.
+2. \`browser_snapshot\` to read the accessibility tree (prefer this over screenshots for assertions — it's structured and cheap).
+3. Interact with \`browser_click\` / \`browser_type\` / \`browser_select_option\` using roles/labels from the snapshot.
+4. \`browser_take_screenshot\` for visual evidence; \`browser_resize\` to check breakpoints; \`browser_console_messages\` to catch runtime errors.
+
+## Fallback path: npx playwright
+
+If the MCP tools are not present, write a throwaway script to \`/tmp\` (never into the project tree) and run it with \`npx playwright\`:
+
+- Ensure the browser is installed once: \`npx playwright install chromium\`.
+- Write \`/tmp/opx-pw-<task>.mjs\` using \`@playwright/test\`'s \`chromium\`, navigate, assert, and capture screenshots to \`/tmp\`.
+- Run headless in CI; use \`headless: false\` only when a human is watching.
+- Clean up \`/tmp\` scripts when done.
+
+## What to verify
+
+- **Rendering & states**: default, hover, focus, loading, error, empty, disabled.
+- **Responsive**: each required breakpoint (mobile/tablet/desktop) via viewport resize.
+- **Flows**: login, form submit/validation, navigation — assert the resulting state, not just that a click happened.
+- **Accessibility**: focus order, roles/labels in the snapshot, color-contrast-affecting states, reduced-motion.
+- **Health**: no console errors; internal links resolve (no 404s).
+
+## Output
+
+Report concrete evidence — screenshot paths, the snapshot/assertions that passed or failed, console errors. When run inside a Cerebro task, put this in the \`VERIFICATION\` section of your \`TASK_RESULT\`; never claim visual verification happened unless you actually drove the browser.
 ` },
 ];
