@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -114,8 +114,23 @@ function isRecord(value: JsonValue): value is { [key: string]: JsonValue } {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+// `opencode debug config` truncates piped stdout (exits before the pipe drains) once the
+// resolved config exceeds ~64KB, so capture it via a temp file to read the full JSON.
+function debugConfigJson(cwd: string, env: NodeJS.ProcessEnv): string {
+  const tmpFile = path.join(tmpdir(), `open-xmen-verify-${process.pid}-${Date.now()}.json`);
+  const fd = openSync(tmpFile, 'w');
+  try {
+    const result = spawnSync('opencode', ['debug', 'config'], { cwd, env, stdio: ['ignore', fd, 'ignore'] });
+    closeSync(fd);
+    if (result.status !== 0) fail(`opencode debug config failed (status ${result.status ?? 'null'})`);
+    return readFileSync(tmpFile, 'utf8').trim();
+  } finally {
+    try { rmSync(tmpFile, { force: true }); } catch {}
+  }
+}
+
 function verifyResolvedOpenCodeRuntime(projectDir: string, env: NodeJS.ProcessEnv) {
-  const output = run('opencode', ['debug', 'config'], { cwd: projectDir, env });
+  const output = debugConfigJson(projectDir, env);
   const config = JSON.parse(output) as JsonValue;
   if (!isRecord(config)) fail('opencode debug config did not return a JSON object');
 

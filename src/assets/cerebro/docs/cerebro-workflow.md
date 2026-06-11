@@ -20,7 +20,7 @@ flowchart TB
     Plan --> Loop
 
     subgraph Loop["Cerebro-driven delegation loop (narrated each step)"]
-        Frontier["cerebro_next_tasks\n(deterministic frontier + routing)"] --> Dispatch["Cerebro spawns specialists\n(cerebro_agent_task / dispatch_batch)"]
+        Frontier["cerebro_next_tasks\n(deterministic frontier + routing)"] --> Dispatch["Cerebro spawns specialists\n(native task tool — visible sessions)"]
         Dispatch --> WJ["visual-engineering:\nJean Grey→Wolverine→Storm"]
         Dispatch --> FG["architecture: Forge"]
         Dispatch --> NC["explore: Nightcrawler"]
@@ -62,7 +62,7 @@ flowchart TB
 | `.cerebro/boulder.json` | Cerebro | Business-level execution checkpoint: active plan, overall status, approvals, verification history, and decisions. Task progress lives in `.cerebro/team-runs/{run-id}.tasks.json`. |
 | `.cerebro/team-runs/{run-id}.json` | Cerebro | Run manifest for command, team name, teammates, approvals, mailbox decisions, verification, and cleanup. |
 | `.cerebro/team-runs/{run-id}.tasks.json` | Cerebro | OpenCode-managed task ledger updated by `cerebro_task_create/list/update` and `cerebro_verify`; task records created from plans must include category, dependencies, files, and verification commands. |
-| `.cerebro/team-runs/{run-id}.mailbox.jsonl` | Cerebro team | Mailbox log written by `cerebro_mailbox_send`, `cerebro_agent_task`, `cerebro_dispatch_agent`, `cerebro_dispatch_batch`, `cerebro_collect_result`, and `cerebro_collect_batch_results`; read by `cerebro_mailbox_read`. |
+| `.cerebro/team-runs/{run-id}.mailbox.jsonl` | Cerebro team | Mailbox log written by `cerebro_mailbox_send` and the Cyclops audit dispatch (`cerebro_audit`); read by `cerebro_mailbox_read`. |
 | `.cerebro/team-runs/{run-id}.progress.jsonl` | Cerebro team | User-visible progress events and low-frequency heartbeats emitted while blocking collection is still running. |
 | `.cerebro/team-runs/{run-id}.problems.jsonl` | Cerebro team | Structured problem list for blockers, failed verification, runtime gaps, weak evidence, and workflow UX issues discovered during the run. |
 | `.cerebro/team-runs/{run-id}.checkpoints.jsonl` | Cerebro team | Durable checkpoints written by `cerebro_checkpoint`. |

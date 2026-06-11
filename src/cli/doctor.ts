@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, openSync, closeSync, rmSync } from "node:fs";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS } from "../runtime/index.js";
 import { opencodeConfigHasOpenXmenPlugin } from "./config.js";
@@ -73,9 +74,26 @@ export function runOpenCodeDoctor(cwd: string): DoctorResult {
 }
 
 function resolvedOpenCodeConfig(cwd: string) {
-  const opencode = spawnSync("opencode", ["debug", "config"], { cwd, encoding: "utf8" });
-  if (opencode.status !== 0 || !opencode.stdout.trim()) return undefined;
-  return parseJsonc(opencode.stdout);
+  // `opencode debug config` truncates its piped stdout (it exits before the pipe finishes
+  // draining) once the resolved config grows past ~64KB — which our 13-agent config does —
+  // producing invalid JSON. Redirect stdout to a temp file so we always read the full output.
+  const tmpFile = path.join(tmpdir(), `open-xmen-doctor-${process.pid}-${Date.now()}.json`);
+  let fd: number | undefined;
+  try {
+    fd = openSync(tmpFile, "w");
+    const opencode = spawnSync("opencode", ["debug", "config"], { cwd, stdio: ["ignore", fd, "ignore"] });
+    closeSync(fd);
+    fd = undefined;
+    if (opencode.status !== 0) return undefined;
+    const text = readFileSync(tmpFile, "utf8");
+    if (!text.trim()) return undefined;
+    return parseJsonc(text);
+  } catch {
+    return undefined;
+  } finally {
+    if (fd !== undefined) { try { closeSync(fd); } catch {} }
+    try { rmSync(tmpFile, { force: true }); } catch {}
+  }
 }
 
 function isOpenXmenPackageRoot(cwd: string) {

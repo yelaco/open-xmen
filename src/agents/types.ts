@@ -4,12 +4,12 @@ export const CEREBRO_RUNTIME_CONTRACT = `## Cerebro Runtime Contract
 
 - Runtime state lives in \`.cerebro/\`.
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
-- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
+- Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files.
 - Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
-- When you need one required result from a specialist, use \`cerebro_agent_task\` (or \`cerebro_dispatch_batch\` + \`cerebro_collect_batch_results\` for parallel). Cerebro drives the orchestration loop and verifies each task with \`cerebro_verify\`.
+- Spawn specialists with the native \`task\` tool (\`subagent_type\` = the agent name); each runs in its own visible session and returns its result when done. Cerebro drives the orchestration loop — scheduling with \`cerebro_next_tasks\` and verifying each task with \`cerebro_verify\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If Cerebro dispatches you a plan task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\` — this block is parsed deterministically.`;
+- If Cerebro spawns you for a plan task, end your reply with a \`TASK_RESULT:\` block including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\` — Cerebro reads it to track status, files, and verification at a glance.`;
 
 export type OpenCodePermissionLevel = "ask" | "allow" | "deny";
 

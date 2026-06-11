@@ -24,7 +24,7 @@ GOTCHAS:
 
 const DEFAULT_OPENCODE_META: OpenCodeMeta = {
   mode: "subagent",
-  steps: 60,
+  steps: 200,
   permission: { edit: "ask", bash: "ask", webfetch: "ask" },
 };
 

@@ -13,8 +13,8 @@ Cerebro (primary agent — drives the loop, narrates every step)
   Phase 1 Intent Gate         → restate & confirm what you meant
   Phase 2 Codebase Assessment → map architecture before touching a line
   Phase 3 Smart Delegation    → loop, narrating each step:
-        cerebro_next_tasks  → deterministic ready batch + routing (agent, model, effort)
-        spawn specialists   → cerebro_agent_task / cerebro_dispatch_batch (parallel)
+        cerebro_next_tasks  → deterministic ready batch + routing (agent, chain)
+        spawn specialists   → native task tool (visible sessions, parallel)
         cerebro_verify      → real shell PASS/FAIL  ← the only path to "verified"
         retry on FAIL or mark blocked; repeat until nothing is ready
   Phase 4 Independent Verif.  → cerebro_audit (Cyclops) → cerebro_run_report

@@ -22,7 +22,7 @@ import {
   createWolverineAgent,
 } from "./agents/index.js";
 import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
-import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
+import { CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
 import { AGENT_MODEL_SLOTS, CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, OPTIONAL_MCP_SERVERS, enabledMcpServers, modelSlots } from "./config/models.js";
 import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent } from "./auto-update.js";
 import type { TaskRecord, TaskStatus } from "./workflow/types.js";
@@ -45,14 +45,8 @@ import {
   writeJson,
 } from "./workflow/fs.js";
 import {
-  assistantTextFromMessages,
-  childSessionID,
-  hasChildSessionClient,
   isRecord,
   parseAuditVerdict,
-  parseModelID,
-  resultData,
-  terminalAssistantMarker,
 } from "./workflow/results.js";
 import { createEventRecorder } from "./workflow/events.js";
 import { createSessionRunner } from "./workflow/sessions.js";
@@ -207,7 +201,7 @@ export const CerebroPlugin: Plugin = async (input) => {
   const mutex = createTaskMutex();
   const events = createEventRecorder(ctx, mutex);
   const sessions = createSessionRunner(client, ctx, events);
-  const { recordProgress, recordProblem, recordAgentResult } = events;
+  const { recordProgress, recordProblem } = events;
 
   return {
     async event({ event }) {
@@ -793,211 +787,6 @@ export const CerebroPlugin: Plugin = async (input) => {
             }, toolContext).catch(() => undefined);
           }
           return JSON.stringify({ verdict: verdict ?? "UNAVAILABLE", findings }, null, 2);
-        },
-      }),
-
-      cerebro_dispatch_agent: tool({
-        description: "Dispatch an asynchronous OpenCode child session for a Cerebro agent and record it in the mailbox. For driving the orchestration loop, prefer cerebro_agent_task (one synchronous spawn) or cerebro_dispatch_batch + cerebro_collect_batch_results (parallel); use this for fire-and-collect flows and recovery.",
-        args: {
-          run_id: tool.schema.string().min(1),
-          agent: tool.schema.enum(CEREBRO_AGENTS).describe("Cerebro agent name, e.g. wolverine, nightcrawler, professor-x"),
-          description: tool.schema.string().min(1),
-          prompt: tool.schema.string().min(1),
-          model_slot: tool.schema.enum(CEREBRO_MODEL_SLOT_KEYS).optional().describe("Cerebro role model slot override for this dispatch"),
-          no_reply: tool.schema.boolean().optional(),
-        },
-        async execute(args, toolContext) {
-          return JSON.stringify(await sessions.dispatch(args, toolContext), null, 2);
-        },
-      }),
-
-      cerebro_dispatch_batch: tool({
-        description: "Spawn multiple independent Cerebro agents in parallel in one call — use for an orchestration wave of conflict-free tasks from cerebro_next_tasks. Collect them with cerebro_collect_batch_results.",
-        args: {
-          run_id: tool.schema.string().min(1),
-          requests: tool.schema.array(tool.schema.object({
-            task_id: tool.schema.string().optional(),
-            agent: tool.schema.enum(CEREBRO_AGENTS).describe("Cerebro agent name, e.g. wolverine, nightcrawler, forge"),
-            description: tool.schema.string().min(1),
-            prompt: tool.schema.string().min(1),
-            model_slot: tool.schema.enum(CEREBRO_MODEL_SLOT_KEYS).optional(),
-            no_reply: tool.schema.boolean().optional(),
-          })).min(1).max(8),
-        },
-        async execute(args, toolContext) {
-          await recordProgress(args.run_id, {
-            phase: "batch dispatch",
-            status: "started",
-            message: `${args.requests.length} independent task(s)`,
-          }, toolContext);
-          const results = await Promise.all(args.requests.map((request) =>
-            sessions.dispatch({ run_id: args.run_id, ...request }, toolContext, "dispatch_batch")
-          ));
-          await recordProgress(args.run_id, {
-            phase: "batch dispatch",
-            status: results.every((result) => result.dispatched) ? "completed" : "failed",
-            message: `${results.filter((result) => result.dispatched).length}/${results.length} dispatched`,
-          }, toolContext);
-          return JSON.stringify({
-            dispatched: results.filter((result) => result.dispatched).length,
-            failed: results.filter((result) => !result.dispatched).length,
-            results,
-          }, null, 2);
-        },
-      }),
-
-      cerebro_agent_task: tool({
-        description: "Run a Cerebro agent in a child session, wait for its reply, record the result, and optionally update a task ledger entry. If aborted, the child_session_id is in the mailbox as a child_session_started record — use cerebro_collect_result to recover.",
-        args: {
-          run_id: tool.schema.string().min(1),
-          task_id: tool.schema.string().optional(),
-          agent: tool.schema.enum(CEREBRO_AGENTS).describe("Cerebro agent name, e.g. wolverine, nightcrawler, professor-x"),
-          description: tool.schema.string().min(1),
-          prompt: tool.schema.string().min(1),
-          model_slot: tool.schema.enum(CEREBRO_MODEL_SLOT_KEYS).optional().describe("Cerebro role model slot override for this task"),
-        },
-        async execute(args, toolContext) {
-          await recordProgress(args.run_id, {
-            phase: "agent task",
-            status: "started",
-            message: `${args.agent} — ${args.description}`,
-            task_id: args.task_id,
-            agent: args.agent,
-          }, toolContext);
-          await appendJsonl(mailboxFile(ctx, args.run_id), {
-            at: now(),
-            type: "dispatch_sync",
-            from: "cerebro",
-            to: args.agent,
-            task_id: args.task_id,
-            description: args.description,
-          });
-          try {
-            if (!hasChildSessionClient(client) || typeof client.session.prompt !== "function") {
-              throw new Error("OpenCode SDK client does not expose synchronous child session prompt support");
-            }
-            const created = await client.session.create({
-              body: { parentID: toolContext.sessionID, title: `${args.agent}: ${args.description}` },
-              query: { directory: toolContext.directory },
-            });
-            const childID = childSessionID(created);
-            if (!childID) throw new Error("OpenCode SDK did not return a child session id");
-            await recordProgress(args.run_id, {
-              phase: "agent task",
-              status: "running",
-              message: `${args.agent} started`,
-              task_id: args.task_id,
-              agent: args.agent,
-              child_session_id: childID,
-            }, toolContext);
-            await appendJsonl(mailboxFile(ctx, args.run_id), {
-              at: now(), type: "child_session_started", from: "cerebro", to: args.agent,
-              task_id: args.task_id, child_session_id: childID, description: args.description,
-            });
-            const slots = modelSlots();
-            const selectedModel = args.model_slot ? slots[args.model_slot] : undefined;
-            const response = await client.session.prompt({
-              path: { id: childID },
-              query: { directory: toolContext.directory },
-              body: {
-                agent: args.agent,
-                ...(selectedModel ? { model: parseModelID(selectedModel) } : {}),
-                noReply: false,
-                parts: [{ type: "text", text: args.prompt }],
-              },
-            });
-            const output = assistantTextFromMessages([resultData(response)]);
-            if (!output) throw new Error("Child session completed without assistant text output");
-            const summary = await recordAgentResult(args.run_id, args.agent, childID, output, args.task_id);
-            await recordProgress(args.run_id, {
-              phase: "agent task",
-              status: summary.status === "blocked" ? "blocked" : summary.status === "failed" ? "failed" : "completed",
-              message: `${args.agent} returned ${terminalAssistantMarker(output) ?? "assistant output"}`,
-              task_id: args.task_id,
-              agent: args.agent,
-              child_session_id: childID,
-              detail: summary.summary,
-            }, toolContext);
-            return JSON.stringify({
-              completed: true,
-              child_session_id: childID,
-              agent: args.agent,
-              task_id: args.task_id,
-              model: selectedModel || "agent-default",
-              parsed: summary,
-              output,
-            }, null, 2);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            await recordProblem(args.run_id, {
-              title: `${args.agent} task failed`,
-              severity: "error",
-              source: "cerebro_agent_task",
-              task_id: args.task_id,
-              agent: args.agent,
-              evidence: message,
-              recommendation: "Check mailbox for a child_session_started record; collect it if present, otherwise retry or narrow the task.",
-            }, toolContext).catch(() => undefined);
-            await appendJsonl(mailboxFile(ctx, args.run_id), {
-              at: now(), type: "agent_failed", from: args.agent, to: "cerebro", task_id: args.task_id, description: args.description, error: message,
-            });
-            return JSON.stringify({
-              completed: false,
-              agent: args.agent,
-              task_id: args.task_id,
-              fallback: "Check mailbox for a child_session_started record for this task — if one exists, use cerebro_collect_result with that child_session_id to recover. Otherwise use @" + args.agent + " directly, then record the result with cerebro_mailbox_send and cerebro_task_update.",
-              error: message,
-            }, null, 2);
-          }
-        },
-      }),
-
-      cerebro_collect_result: tool({
-        description: "Collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry. Pass poll: true to block until a terminal marker is seen (TASK_RESULT, DESIGN_SPEC_READY, PLAN_DRAFT, REQUIREMENTS_READY, AUDIT_PASSED, etc.). Use after cerebro_dispatch_agent for a single spawn.",
-        args: {
-          run_id: tool.schema.string().min(1),
-          child_session_id: tool.schema.string().min(1),
-          agent: tool.schema.enum(CEREBRO_AGENTS).optional(),
-          task_id: tool.schema.string().optional(),
-          limit: tool.schema.number().int().min(1).max(100).optional(),
-          poll: tool.schema.boolean().optional(),
-        },
-        async execute(args, toolContext) {
-          return JSON.stringify(await sessions.collect(args, toolContext), null, 2);
-        },
-      }),
-
-      cerebro_collect_batch_results: tool({
-        description: "Collect multiple asynchronous child sessions in parallel and record each result. Use after cerebro_dispatch_batch for independent worker fan-out; poll defaults to true per item.",
-        args: {
-          run_id: tool.schema.string().min(1),
-          results: tool.schema.array(tool.schema.object({
-            child_session_id: tool.schema.string().min(1),
-            agent: tool.schema.enum(CEREBRO_AGENTS).optional(),
-            task_id: tool.schema.string().optional(),
-            limit: tool.schema.number().int().min(1).max(100).optional(),
-            poll: tool.schema.boolean().optional(),
-          })).min(1).max(8),
-        },
-        async execute(args, toolContext) {
-          await recordProgress(args.run_id, {
-            phase: "batch collect",
-            status: "running",
-            message: `${args.results.length} child session(s)`,
-          }, toolContext);
-          const results = await Promise.all(args.results.map((item) =>
-            sessions.collect({ run_id: args.run_id, poll: true, ...item }, toolContext)
-          ));
-          await recordProgress(args.run_id, {
-            phase: "batch collect",
-            status: results.every((result) => result.collected) ? "completed" : "blocked",
-            message: `${results.filter((result) => result.collected).length}/${results.length} collected`,
-          }, toolContext);
-          return JSON.stringify({
-            collected: results.filter((result) => result.collected).length,
-            pending_or_failed: results.filter((result) => !result.collected).length,
-            results,
-          }, null, 2);
         },
       }),
 

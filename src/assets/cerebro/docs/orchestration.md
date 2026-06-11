@@ -32,8 +32,8 @@ Cerebro writes the approved plan to `.cerebro/plans/{slug}.md`, creates task rec
 
 **Cerebro is the orchestrator** — it spawns subagents and drives the loop, narrating each step. Determinism lives in the tools it calls, not in removing Cerebro from the loop:
 
-1. **`cerebro_next_tasks`** returns the deterministic ready batch: pending tasks whose `depends_on` are all complete, conflict-free (tasks sharing declared `Files` are never co-scheduled), each with its routed `agent` + `model_slot` (effort-adjusted) and visual-engineering `chain`.
-2. Cerebro **spawns** each ready task — `cerebro_agent_task` (one) or `cerebro_dispatch_batch` + `cerebro_collect_batch_results` (parallel) — running chains in order and threading the design spec/component paths forward.
+1. **`cerebro_next_tasks`** returns the deterministic ready batch: pending tasks whose `depends_on` are all complete, conflict-free (tasks sharing declared `Files` are never co-scheduled), each with its routed `agent` and visual-engineering `chain`.
+2. Cerebro **spawns** each ready task with the native `task` tool (`subagent_type` = the routed `agent`), launching independent tasks concurrently for parallelism and running chains in order, threading the design spec/component paths forward. Each subagent runs in its own visible session and returns when done — OpenCode manages completion, so Cerebro never polls. (Each agent uses its own configured model; the `task` tool has no per-call model override.)
 3. **`cerebro_verify`** runs the task's `Verify` commands in a real shell, records PASS/FAIL on the ledger with captured output, and is the only path to status `verified` — no model self-grading.
 4. On FAIL, Cerebro re-spawns the responsible agent with the exact failure output (≈2 retries), else marks the task blocked and records a problem.
 5. Worker `GOTCHAS:` sections are harvested to `.cerebro/notepads/{run_id}/gotchas.md` and forwarded to later workers; progress and problems are recorded throughout.

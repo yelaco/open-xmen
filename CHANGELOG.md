@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **Autonomous runs go non-stop.** Raised the orchestrator's step budget (Cerebro `steps` 60 → 1000)
+  and the worker budget (60 → 200). A full autonomous build (plan → assess → many spawn/verify
+  cycles → audit → report) was exhausting Cerebro's 60-step turn limit and halting partway with
+  "maximum steps reached," forcing a manual resume — the opposite of autonomous. Native task-tool
+  spawning also costs fewer orchestrator steps per task (no separate collect call).
+- **Fixed `doctor` failing on large configs.** `opencode debug config` truncates its piped stdout
+  (it exits before the pipe drains) once the resolved config passes ~64KB, which our 13-agent
+  config now does — so `doctor` (and the release smoke) read invalid JSON and reported "could not
+  read resolved OpenCode config." Both now capture the output via a temp file instead of a pipe.
+- **Native subagent spawning (visible windows).** Cerebro now spawns specialists with OpenCode's
+  built-in `task` tool (`subagent_type` = the routed agent) instead of custom child-session
+  machinery. Subagents render as **visible sessions** in the TUI (like oh-my-openagent), OpenCode
+  manages completion (no more polling for a terminal marker — which could hang a run for up to 30
+  minutes when a free-form scout never printed `TASK_RESULT`), and independent tasks still run in
+  parallel (concurrent `task` calls). Removed the custom `cerebro_agent_task`,
+  `cerebro_dispatch_agent`, `cerebro_dispatch_batch`, `cerebro_collect_result`, and
+  `cerebro_collect_batch_results` tools (the SessionRunner is retained only for the Cyclops audit
+  dispatch). Trade-off: the `task` tool has no per-call model parameter, so the per-task `effort`
+  (low/high) hint no longer swaps the model — each agent runs on its own configured model + fallbacks.
 - **Model-driven orchestration.** Cerebro now drives the execution loop itself — spawning
   specialist subagents and narrating each step like a personal assistant — instead of firing a
   single blocking engine call. The monolithic `cerebro_execute_workflow` engine is removed and
@@ -68,7 +87,6 @@ The rebirth release: orchestration moves out of prompts and into the plugin runt
 - Renamed `/to-me-my-x-men` to `/cerebro-ultrawork`; the command now opens with the "To me, my X-Men!" catchphrase when it starts working.
 - Cerebro confirms the workflow (and, for builds, an Autonomous vs Collaborative choice) before running anything when a request arrives in natural conversation; direct slash commands are honored without a prompt.
 - The `conductor` model slot is renamed to `auditor`. `CEREBRO_MODEL_CONDUCTOR` is still honored as a legacy fallback; new setups should use `CEREBRO_MODEL_AUDITOR`.
-- `cerebro_dispatch_agent`, `cerebro_dispatch_batch`, `cerebro_collect_result`, and `cerebro_collect_batch_results` are demoted to low-level recovery/consultation tools.
 - README and docs repositioned: Open X-Men is no longer described as a Claude Code port — it is model-as-brain, engine-as-conductor.
 
 ### Removed
