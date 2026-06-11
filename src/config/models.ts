@@ -299,6 +299,15 @@ export function isCerebroModelSlot(value: string): value is CerebroModelSlot {
   return (CEREBRO_MODEL_SLOT_KEYS as readonly string[]).includes(value);
 }
 
+// A per-task effort override remaps which slot's model a dispatch uses, without changing the
+// agent: "low" runs it on the cheap/fast tier, "high" on the top-reasoning tier (the planner
+// slot resolves to the strongest model in every preset). Unset keeps the route's own slot.
+export function effortModelSlot(effort: "low" | "high" | undefined, routeSlot: CerebroModelSlot): CerebroModelSlot {
+  if (effort === "low") return "fast";
+  if (effort === "high") return "planner";
+  return routeSlot;
+}
+
 function modelForSlot(slot: CerebroModelSlot) {
   const primary = process.env[MODEL_SLOT_ENV[slot]];
   if (primary) return primary;

@@ -21,6 +21,7 @@ export type TaskRecord = {
   description: string;
   owner: string;
   category?: string;
+  effort?: "low" | "high";
   verification_commands?: string[];
   files?: string[];
   attempts?: number;

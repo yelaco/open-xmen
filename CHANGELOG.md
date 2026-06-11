@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Per-task **effort** override on `cerebro_task_create` (`low` / `high`): the engine runs that
+  task's worker on the cheap/fast model (`low`) or the top-reasoning model (`high`) without
+  changing which agent runs it; unset keeps the category's normal model. Plans can mark trivial
+  or hard tasks via the new `Effort` field.
+- Four new optional `opx-` skills: `opx-test` and `opx-debug` (Wolverine), `opx-code-review`
+  (Beast), and `opx-security-review` (Emma Frost). Those agents regain/gain `skill: allow`.
 - Added a GitHub Actions CI workflow (build, typecheck, `bun test`, and a generated-assets
   freshness gate) so regressions are caught on PRs.
 - Added an MIT `LICENSE` and `package.json` `license` field.

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { OPTIONAL_MCP_SERVERS, defaultModelChainForAgent, enabledMcpServers, modelSlots, resetPresetCache } from "../src/config/models.js";
+import { OPTIONAL_MCP_SERVERS, defaultModelChainForAgent, effortModelSlot, enabledMcpServers, modelSlots, resetPresetCache } from "../src/config/models.js";
 
 // Point the config-dir resolver at an empty temp dir so file-based preset resolution can't
 // read this machine's real ~/.config/opencode/open-xmen.json.
@@ -119,6 +119,17 @@ describe("model preset resolution", () => {
     });
     withEnv("OPEN_XMEN_MCP_SERVERS", "none", () => {
       expect(enabledMcpServers()).toEqual([]);
+    });
+  });
+
+  test("effortModelSlot remaps the dispatch tier, preserving the route slot when unset", () => {
+    expect(effortModelSlot(undefined, "workers")).toBe("workers");
+    expect(effortModelSlot("low", "workers")).toBe("fast");
+    expect(effortModelSlot("high", "workers")).toBe("planner");
+    // effort resolves to a real model under a preset
+    withPreset("anthropic", "balance", () => {
+      expect(modelSlots()[effortModelSlot("low", "workers")]).toBe("anthropic/claude-haiku-4-5");
+      expect(modelSlots()[effortModelSlot("high", "workers")]).toBe("anthropic/claude-opus-4-8");
     });
   });
 

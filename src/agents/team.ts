@@ -248,6 +248,8 @@ You are Wolverine, the sole implementation specialist. Own all feature logic, co
 
 Use TDD when practical. Maintain task-scoped todos under .cerebro/pending-todos/{team}/{agent}/{task}.txt and remove them only as completed. Return a TASK_RESULT block with files changed, tests run, verification, and issues.
 
+When skills are available, use \`opx-test\` for writing focused, behavior-driven tests and \`opx-debug\` for reproduce-first root-cause debugging of failures.
+
 Write thorough automated tests for your work — unit and integration tests, plus end-to-end test specs (e.g. Playwright files) where the plan calls for them — so the workflow engine runs them as deterministic verification. Do not interactively drive a browser to eyeball results; final browser verification belongs to Cyclops at the audit gate. Leave commits, history rewriting, and PRs to Cerebro — focus on the code and its tests.
 
 ${CEREBRO_RUNTIME_CONTRACT}`;
@@ -263,7 +265,7 @@ export function createWolverineAgent(
     "Implementation worker for code, tests, scripts, and bug fixes.",
     WOLVERINE_PROMPT,
     modelChain("wolverine")[0],
-    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask", task: "deny", todowrite: "allow" } },
+    { ...DEFAULT_OPENCODE_META, variant: "medium", permission: { edit: "ask", bash: "allow", webfetch: "ask", task: "deny", todowrite: "allow", skill: "allow" } },
     model ?? modelChain("wolverine"),
     customPrompt,
     customAppendPrompt,
@@ -469,6 +471,8 @@ const BEAST_PROMPT = `# beast
 
 You are Beast, gap analyst. Review plans and implementation evidence for missing cases, weak verification, invented facts, and hidden risks. Write reviews under .cerebro/notepads/reviews/ when asked.
 
+When reviewing code or a diff and the \`opx-code-review\` skill is available, use it for an evidence-backed correctness/reuse review (file:line for every finding).
+
 ## Output Contract
 
 Return reviews in this form:
@@ -498,7 +502,7 @@ export function createBeastAgent(
     "Gap analyst and plan/code critique specialist.",
     BEAST_PROMPT,
     modelChain("emma-frost")[0],
-    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "deny", bash: "ask", webfetch: "ask", task: "deny" } },
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "deny", bash: "ask", webfetch: "ask", task: "deny", skill: "allow" } },
     model ?? modelChain("emma-frost"),
     customPrompt,
     customAppendPrompt,
@@ -510,6 +514,8 @@ export function createBeastAgent(
 const EMMA_FROST_PROMPT = `# emma-frost
 
 You are Emma Frost, ruthless validator. Validate high-risk plans and final evidence. Return OKAY/REJECT with specific reasons. Prefer rejection over vague approval when criteria are not testable or evidence is weak.
+
+For auth, billing, data-access, secret-handling, or public-API work, use the \`opx-security-review\` skill when available to hunt exploitable vulnerabilities with evidence and severity before you rule.
 
 ## Output Contract
 
@@ -540,7 +546,7 @@ export function createEmmaFrostAgent(
     "Strict validation specialist for high-risk, high-accuracy decisions.",
     EMMA_FROST_PROMPT,
     modelChain("emma-frost")[0],
-    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "deny", bash: "ask", webfetch: "ask", task: "deny" } },
+    { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "deny", bash: "ask", webfetch: "ask", task: "deny", skill: "allow" } },
     model ?? modelChain("emma-frost"),
     customPrompt,
     customAppendPrompt,
