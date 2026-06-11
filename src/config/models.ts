@@ -211,19 +211,23 @@ export function loadPresetSelection(): PresetSelection | null {
 
 // Optional MCP servers the installer can register into OpenCode config. Extensible — add an
 // entry here (and the plugin registers it when enabled). `requires` is informational for the
-// install prompt (the runtime that must be available to launch it).
-export const OPTIONAL_MCP_SERVERS: Record<string, { command: string[]; description: string; requires: string; usedBy: string }> = {
+// install prompt (the runtime that must be available to launch it). `timeoutMs` overrides
+// OpenCode's MCP startup timeout (default ~30s) — set it high for servers whose runtime fetches
+// and builds the package on first launch (npx/uvx cold start), so they aren't killed mid-download.
+export const OPTIONAL_MCP_SERVERS: Record<string, { command: string[]; description: string; requires: string; usedBy: string; timeoutMs?: number }> = {
   playwright: {
     command: ["npx", "@playwright/mcp@latest"],
     description: "Browser automation & UI verification",
     requires: "npx",
     usedBy: "opx-playwright skill (Cyclops audit gate)",
+    timeoutMs: 60000,
   },
   semble: {
     command: ["uvx", "--from", "semble[mcp]", "semble"],
     description: "Fast code search — ~98% fewer tokens than grep+read",
     requires: "uvx (uv)",
     usedBy: "Nightcrawler",
+    timeoutMs: 120000,
   },
 };
 

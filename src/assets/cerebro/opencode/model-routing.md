@@ -56,4 +56,4 @@ Override slots with these variables. Legacy variables (`CEREBRO_MODEL_FRONTIER`,
 
 ## Routing Policy
 
-Use `orchestrator` for Cerebro command interpretation, `auditor` for the final Cyclops audit wave, `planner`/`design` for outputs that gate downstream quality, `analyst` for customer and requirements work, `workers` for implementation, and `fast` for bounded retrieval/search. Execution scheduling itself needs no model — the workflow engine is deterministic TypeScript.
+Use `orchestrator` for Cerebro (it drives the delegation loop), `auditor` for the final Cyclops audit, `planner`/`design` for outputs that gate downstream quality, `analyst` for customer and requirements work, `workers` for implementation, and `fast` for bounded retrieval/search. Scheduling itself needs no model — `cerebro_next_tasks` is deterministic TypeScript.

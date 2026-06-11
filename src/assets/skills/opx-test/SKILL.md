@@ -3,7 +3,7 @@ name: opx-test
 description: Write and run focused automated tests — unit and integration — that actually exercise the change. Use when implementing a feature or fix, or when a task's verification needs real test coverage rather than assertions of correctness.
 ---
 
-This skill makes testing deliberate and evidence-producing. Tests you write become the workflow engine's deterministic verification, so they must genuinely fail when the code is wrong.
+This skill makes testing deliberate and evidence-producing. Tests you write become Cerebro's deterministic verification (run via `cerebro_verify`), so they must genuinely fail when the code is wrong.
 
 ## Find the project's test setup first
 

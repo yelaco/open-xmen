@@ -7,12 +7,13 @@ Cerebro turns OpenCode into a coordinated X-Men-themed agent workflow using nati
 | Complexity | Approach | When to use |
 |---|---|---|
 | Simple | Ask normally | Explanation, small command, single obvious edit. |
-| New repo or stale context | `/cerebro-index` | Build `.cerebro/project-context.md` before planning or execution. |
 | Clear implementation | `/cerebro-ultrawork [task]` | Clear goal, low/medium risk, no long interview needed. |
 | Complex or risky | `/cerebro-plan [task]` then `/cerebro-start-work` | Multi-step feature, architecture change, migration, security, data, production impact. |
 | Interrupted plan | `/cerebro-start-work` | Continue from `.cerebro/boulder.json`. |
 
 If the user explicitly invokes `/cerebro-ultrawork` for ambiguous or product-shaped work, Cerebro asks only for blockers it cannot infer safely. Otherwise Legion and Cypher record assumptions in customer/requirements notepads before Professor X, Beast, Emma Frost, and the workers proceed.
+
+On a natural-language request (no slash command), Cerebro's **Intent Gate** triages the request by complexity and risk, picks a recommended path from the table above, then confirms it as a **selectable choice** via OpenCode's built-in `question` tool — recommended option first — instead of asking the user to type a number. A request triaged as Simple is answered directly with no confirmation.
 
 ## Three-Layer Architecture
 
@@ -25,23 +26,20 @@ Cerebro classifies the request and owns user interaction. Consultants are invoke
 - **Beast**: gap review on all plans.
 - **Emma Frost**: HIGH risk, auth, billing, migration, or data-integrity plans.
 
-Cerebro writes the approved plan to `.cerebro/plans/{slug}.md`, creates task records with `category`/`depends_on`/`files`/`verification_commands`, then invokes `cerebro_execute_workflow`.
+Cerebro writes the approved plan to `.cerebro/plans/{slug}.md`, creates task records with `category`/`depends_on`/`files`/`verification_commands`/`effort`, then drives the delegation loop itself.
 
-### Execution Engine (deterministic TypeScript)
+### Execution (Cerebro-driven, deterministic tools)
 
-`cerebro_execute_workflow` is plugin runtime code, not an agent. No LLM decides scheduling, verification, or retry counts. The engine:
+**Cerebro is the orchestrator** — it spawns subagents and drives the loop, narrating each step. Determinism lives in the tools it calls, not in removing Cerebro from the loop:
 
-1. Computes the dependency frontier — pending tasks whose `depends_on` tasks are all complete.
-2. Routes each task by `Category` to the correct worker chain (table below).
-3. Dispatches conflict-free frontier tasks in parallel batches; tasks sharing declared `Files` are never co-scheduled.
-4. Collects each worker's `TASK_RESULT` from its child session.
-5. Runs the task's `Verify` commands in a real shell, recording PASS/FAIL on the ledger with captured output — no model self-grading.
-6. Retries failed tasks at most twice, sending the responsible worker the exact failure output.
-7. Harvests each worker's `GOTCHAS:` section into `.cerebro/notepads/{run_id}/gotchas.md` and forwards it to later workers.
-8. Emits progress milestones for every phase transition and records blockers, failed verification, and runtime gaps to `.cerebro/team-runs/{run-id}.problems.jsonl`.
-9. Returns a structured result (`complete` / `blocked` / `timeout` / `aborted`) with task, verification, retry, and audit summaries. Re-invoking with the same run_id resumes from the task ledger.
+1. **`cerebro_next_tasks`** returns the deterministic ready batch: pending tasks whose `depends_on` are all complete, conflict-free (tasks sharing declared `Files` are never co-scheduled), each with its routed `agent` and visual-engineering `chain`.
+2. Cerebro **spawns** each ready task with the native `task` tool (`subagent_type` = the routed `agent`), launching independent tasks concurrently for parallelism and running chains in order, threading the design spec/component paths forward. Each subagent runs in its own visible session and returns when done — OpenCode manages completion, so Cerebro never polls. (Each agent uses its own configured model; the `task` tool has no per-call model override.)
+3. **`cerebro_verify`** runs the task's `Verify` commands in a real shell, records PASS/FAIL on the ledger with captured output, and is the only path to status `verified` — no model self-grading.
+4. On FAIL, Cerebro re-spawns the responsible agent with the exact failure output (≈2 retries), else marks the task blocked and records a problem.
+5. Worker `GOTCHAS:` sections are harvested to `.cerebro/notepads/{run_id}/gotchas.md` and forwarded to later workers; progress and problems are recorded throughout.
+6. Cerebro repeats until `cerebro_next_tasks` is empty, resuming any interrupted run straight from the ledger.
 
-**Category routing table:**
+**Category routing** (applied by `cerebro_next_tasks`):
 
 | Category | Worker chain |
 |---|---|
@@ -53,11 +51,11 @@ Cerebro writes the approved plan to `.cerebro/plans/{slug}.md`, creates task rec
 
 ### Worker Layer
 
-Workers own their domain and return `TASK_RESULT` with files changed, tests run, and verification evidence. Workers do not re-dispatch to each other — sequencing belongs to the engine.
+Workers own their domain and return `TASK_RESULT` with files changed, tests run, and verification evidence. Workers do not re-dispatch to each other — sequencing belongs to Cerebro.
 
-### Audit Wave (Cyclops)
+### Audit (Cyclops)
 
-When every task is done and verified, the engine dispatches Cyclops once as the final quality gate. Cyclops inspects the diff, cross-checks verification evidence against the plan's acceptance criteria, and hunts scope creep, missed work, and test gaps. It rules `AUDIT_PASSED` or `AUDIT_FAILED` with a structured JSON findings array; failures become problem records, and retriable findings re-queue their tasks for one more engine pass.
+When every task is done and verified, Cerebro calls `cerebro_audit`, which dispatches Cyclops once as the final quality gate. Cyclops inspects the diff, cross-checks verification evidence against the plan's acceptance criteria, and hunts scope creep, missed work, and test gaps. It rules `AUDIT_PASSED` or `AUDIT_FAILED` with a structured JSON findings array; failures become problem records, and retriable findings are re-queued by Cerebro for another pass.
 
 ## Verification Standard
 

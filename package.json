@@ -1,6 +1,6 @@
 {
   "name": "open-xmen",
-  "version": "0.3.1",
+  "version": "0.3.4",
   "description": "Cerebro/X-Men workflow for OpenCode: agent planning + deterministic TypeScript execution engine + Cyclops audit.",
   "license": "MIT",
   "type": "module",

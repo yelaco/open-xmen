@@ -251,18 +251,18 @@ export function createSessionRunner(client: unknown, ctx: RuntimeContext, events
             await recordProblem(args.run_id, {
               title: `${args.agent ?? "child-session"} timed out while collecting result`,
               severity: "blocker",
-              source: "cerebro_collect_result",
+              source: "cerebro_audit",
               task_id: args.task_id,
               agent: args.agent,
               evidence: `No terminal marker after ${formatElapsed(MAX_POLL_MS)} for child session ${args.child_session_id}`,
-              recommendation: "Collect again, inspect the child session, or re-dispatch the task with a narrower prompt.",
+              recommendation: "Re-run cerebro_audit, or inspect the Cyclops child session.",
             }, toolContext).catch(() => undefined);
             return {
               collected: false,
               child_session_id: args.child_session_id,
               timed_out: true,
               terminal_markers: CHILD_SESSION_TERMINAL_MARKERS,
-              message: "Polling timed out after 30 minutes. Call cerebro_collect_result again to retry, or escalate the blocked task.",
+              message: "Polling timed out after 30 minutes. Re-run cerebro_audit to retry.",
             };
           }
 
