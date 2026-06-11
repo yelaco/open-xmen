@@ -13,6 +13,10 @@
   the optional `opx-personal-assistant` skill sharpens *how* it keeps the user informed.
 - Removed the now-vestigial `.cerebro/cerebro-identity.md` — the Cerebro agent (a `mode: primary`
   default agent) is the single source of truth for Cerebro's identity and orchestration.
+- **MCP cold-start timeout.** Optional MCP servers now register with a longer startup timeout (60s
+  playwright, 120s semble) so a first-run `npx`/`uvx` package download isn't killed by OpenCode's
+  ~30s default. Documented pre-warming (`uv tool install "semble[mcp]"`) and `opencode mcp list` for
+  status. (Wiring via the plugin `config` hook was already correct — OpenCode honors it.)
 - **Sharper Intent Gate.** Cerebro now triages a natural-language request by complexity and risk and
   recommends a path (Direct / Autonomous / Collaborative) instead of asking open-endedly — deciding
   more, asking less. When it does need the user to choose, it presents the options through OpenCode's

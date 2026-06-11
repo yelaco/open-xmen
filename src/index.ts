@@ -137,10 +137,14 @@ function registerCerebroConfig(input: OpenCodeConfig) {
   // Off unless enabled, so no extra processes are spawned by default.
   for (const name of enabledMcpServers()) {
     input.mcp ??= {};
+    const server = OPTIONAL_MCP_SERVERS[name];
     input.mcp[name] ??= {
       type: "local",
-      command: OPTIONAL_MCP_SERVERS[name].command,
+      command: server.command,
       enabled: true,
+      // Cold npx/uvx launches fetch+build the package on first run; without a generous
+      // timeout OpenCode kills the server mid-download (the default ~30s is too short).
+      ...(server.timeoutMs ? { timeout: server.timeoutMs } : {}),
     };
   }
 }

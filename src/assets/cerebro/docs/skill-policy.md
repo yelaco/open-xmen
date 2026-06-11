@@ -24,6 +24,8 @@ All are optional: agents with `skill: allow` use them when present and fall back
 
 Re-run install (or edit `open-xmen.json`) to change the set later.
 
+**First launch can be slow.** Both servers fetch and build their package on the first run (`npx` / `uvx` cold start), so the plugin registers them with a longer startup timeout (60s for playwright, 120s for semble) — the default ~30s kills the server mid-download. To skip the wait, or if your network throttles npm/PyPI, pre-warm the cache once: `npx @playwright/mcp@latest --help` and `uv tool install "semble[mcp]"`. Check status anytime with `opencode mcp list`; a server stuck on a download or network error shows there as `failed`.
+
 ## Rules
 
 - Skills are never required for the base workflow.
