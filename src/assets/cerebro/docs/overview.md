@@ -14,7 +14,7 @@ Legacy `.claude/` files may exist as migration source or compatibility material,
 ## Quick Start
 
 ```text
-/to-me-my-x-men add request validation to the API
+/cerebro-ultrawork add request validation to the API
 /cerebro-index
 /cerebro-plan redesign the authentication flow
 /cerebro-start-work
@@ -26,13 +26,13 @@ Legacy `.claude/` files may exist as migration source or compatibility material,
 |---|---|---|
 | Direct | Ask normally | The request is simple and low-risk. |
 | Index | `/cerebro-index` | Build project context for faster future work. |
-| Autonomous | `/to-me-my-x-men [task]` | The task is clear and should be executed end to end. |
+| Autonomous | `/cerebro-ultrawork [task]` | The task is clear and should be executed end to end. |
 | Planning | `/cerebro-plan [task]` | Requirements are complex, ambiguous, high-impact, or need approval. |
 | Execution | `/cerebro-start-work` | A plan exists and should be executed or resumed. |
 
-Package updates are npm-managed. Re-run `bunx open-xmen@latest install` to refresh the plugin config/cache without writing project runtime files. Use `install --with-runtime-files --reset` only when you intentionally want to refresh legacy managed `.opencode/`, `.cerebro/`, and `AGENTS.md` files.
+Package updates are npm-managed. Open X-Men is plugin-only: re-run `bunx open-xmen@latest install` to refresh the plugin config/cache and re-install the global skills. No `.opencode/`, `.cerebro/`, or `AGENTS.md` files are written into your project.
 
-When `/to-me-my-x-men` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and the workflow engine executes the plan deterministically — parallel dependency frontiers, shell verification, bounded retries — with Cyclops auditing the final result.
+When `/cerebro-ultrawork` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and the workflow engine executes the plan deterministically — parallel dependency frontiers, shell verification, bounded retries — with Cyclops auditing the final result.
 
 ## Recommended Reading
 

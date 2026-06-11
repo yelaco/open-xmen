@@ -23,7 +23,7 @@ import {
 } from "./agents/index.js";
 import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
-import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, modelSlots } from "./config/models.js";
+import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, OPTIONAL_MCP_SERVERS, enabledMcpServers, modelSlots } from "./config/models.js";
 import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent } from "./auto-update.js";
 import type { TaskRecord, TaskStatus } from "./workflow/types.js";
 import {
@@ -73,6 +73,7 @@ type OpenCodeConfig = Record<string, unknown> & {
     subtask?: boolean;
   }>;
   agent?: Record<string, Record<string, unknown> | undefined>;
+  mcp?: Record<string, Record<string, unknown> | undefined>;
 };
 
 function defaultAgentDefinitions() {
@@ -123,6 +124,18 @@ function registerCerebroConfig(input: OpenCodeConfig) {
   input.agent ??= {};
   for (const agent of defaultAgentDefinitions()) {
     input.agent[agent.name] ??= toConfigAgent(agent);
+  }
+
+  // Register optional MCP servers the user opted into via open-xmen.json `mcp_servers`
+  // (e.g. playwright for the opx-playwright skill, semble for Nightcrawler's code search).
+  // Off unless enabled, so no extra processes are spawned by default.
+  for (const name of enabledMcpServers()) {
+    input.mcp ??= {};
+    input.mcp[name] ??= {
+      type: "local",
+      command: OPTIONAL_MCP_SERVERS[name].command,
+      enabled: true,
+    };
   }
 }
 
@@ -317,7 +330,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           });
           await saveTasks(ctx, runId, []);
 
-          if (["/to-me-my-x-men", "/cerebro-start-work"].includes(args.command)) {
+          if (["/cerebro-ultrawork", "/cerebro-start-work"].includes(args.command)) {
             await writeJson(safeRuntimePath(ctx, "boulder.json"), {
               version: 2,
               active_plan: "",

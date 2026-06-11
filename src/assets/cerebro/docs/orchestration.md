@@ -8,11 +8,11 @@ Cerebro turns OpenCode into a coordinated X-Men-themed agent workflow using nati
 |---|---|---|
 | Simple | Ask normally | Explanation, small command, single obvious edit. |
 | New repo or stale context | `/cerebro-index` | Build `.cerebro/project-context.md` before planning or execution. |
-| Clear implementation | `/to-me-my-x-men [task]` | Clear goal, low/medium risk, no long interview needed. |
+| Clear implementation | `/cerebro-ultrawork [task]` | Clear goal, low/medium risk, no long interview needed. |
 | Complex or risky | `/cerebro-plan [task]` then `/cerebro-start-work` | Multi-step feature, architecture change, migration, security, data, production impact. |
 | Interrupted plan | `/cerebro-start-work` | Continue from `.cerebro/boulder.json`. |
 
-If the user explicitly invokes `/to-me-my-x-men` for ambiguous or product-shaped work, Cerebro asks only for blockers it cannot infer safely. Otherwise Legion and Cypher record assumptions in customer/requirements notepads before Professor X, Beast, Emma Frost, and the workers proceed.
+If the user explicitly invokes `/cerebro-ultrawork` for ambiguous or product-shaped work, Cerebro asks only for blockers it cannot infer safely. Otherwise Legion and Cypher record assumptions in customer/requirements notepads before Professor X, Beast, Emma Frost, and the workers proceed.
 
 ## Three-Layer Architecture
 

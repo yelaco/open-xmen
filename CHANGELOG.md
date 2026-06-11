@@ -10,12 +10,18 @@ The rebirth release: orchestration moves out of prompts and into the plugin runt
 - Cyclops audit wave: when all tasks are done and verified, the engine dispatches Cyclops once as a final quality gate. Cyclops rules `AUDIT_PASSED` or `AUDIT_FAILED` with a structured JSON findings array; retriable findings re-queue their tasks for one more engine pass.
 - `files` parameter on `cerebro_task_create` — declared file scopes drive parallel-batch conflict avoidance.
 - Workers may report a `GOTCHAS:` section in `TASK_RESULT`; the engine harvests it into `.cerebro/notepads/{run_id}/gotchas.md` and forwards it to later workers.
+- Bundled skills, installed globally to `~/.config/opencode/skills/` with an `opx-` namespace prefix so OpenCode discovers them: `opx-frontend-design` (distinctive, non-generic frontend aesthetics), `opx-git` (atomic commits + safe rebase + history archaeology), and `opx-playwright` (real-browser UI verification, preferring the Playwright MCP server with an `npx playwright` fallback). Agents with `skill: allow` use them when present and fall back otherwise: Jean Grey + Storm (design), Cerebro (git — it owns commits/history/PRs), Cyclops (playwright — it owns interactive browser verification at the audit gate; Wolverine and Storm build and write tests instead). All remain optional overlays.
+- Optional MCP servers, selected at install (multi-select or `--mcp <list>`) and saved to `open-xmen.json` (`mcp_servers`): `playwright` (`@playwright/mcp`, for the opx-playwright skill) and `semble` (`semble[mcp]`, fast code search for Nightcrawler). The plugin registers enabled servers in OpenCode config at load; off by default. Editable later by re-running install or editing the file.
+- Removed the `--with-runtime-files` install path. Open X-Men is plugin-only: commands and agents register through the plugin, and skills install globally. `.cerebro/` docs/templates/schemas are now repo-internal references, not shipped into projects.
+- Provider model presets. `install` offers an interactive multi-select for your model subscription(s) (OpenAI / Anthropic) plus a focus (performance / balance / cost), or accepts `--provider <list>` / `--focus <name>` non-interactively. The choice is saved to `~/.config/opencode/open-xmen.json` and the plugin resolves, per slot, the best model for that agent's job across the subscriptions you own (image stays OpenAI-only). `CEREBRO_MODEL_*` env vars still override individual slots.
 - `bun test` suite covering the scheduler, router, verifier, result parsers, and engine loop.
 
 ### Changed
 
 - **Cyclops is reborn as the final Auditor.** It no longer conducts execution as a child session; the workflow engine owns routing, batching, verification, and retries. Cyclops is read-only with inspection bash.
-- `/cerebro-start-work` and `/to-me-my-x-men` now create task records and call `cerebro_execute_workflow` instead of dispatching Cyclops as a conductor.
+- `/cerebro-start-work` and `/cerebro-ultrawork` now create task records and call `cerebro_execute_workflow` instead of dispatching Cyclops as a conductor.
+- Renamed `/to-me-my-x-men` to `/cerebro-ultrawork`; the command now opens with the "To me, my X-Men!" catchphrase when it starts working.
+- Cerebro confirms the workflow (and, for builds, an Autonomous vs Collaborative choice) before running anything when a request arrives in natural conversation; direct slash commands are honored without a prompt.
 - The `conductor` model slot is renamed to `auditor`. `CEREBRO_MODEL_CONDUCTOR` is still honored as a legacy fallback; new setups should use `CEREBRO_MODEL_AUDITOR`.
 - `cerebro_dispatch_agent`, `cerebro_dispatch_batch`, `cerebro_collect_result`, and `cerebro_collect_batch_results` are demoted to low-level recovery/consultation tools.
 - README and docs repositioned: Open X-Men is no longer described as a Claude Code port — it is model-as-brain, engine-as-conductor.

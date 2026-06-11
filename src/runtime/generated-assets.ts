@@ -20,7 +20,7 @@ Open every Cerebro command with a short cinematic announcement, then move quickl
 - \`/cerebro-index\` — build or refresh \`.cerebro/project-context.md\`.
 - \`/cerebro-plan [task]\` — interview-first planning; write approved plans to \`.cerebro/plans/\`.
 - \`/cerebro-start-work\` — execute or resume the latest \`.cerebro/plans/*.md\`.
-- \`/to-me-my-x-men [task]\` — autonomous full-team mode; Legion/Cypher for product-shaped work, the workflow engine executes and Cyclops audits.
+- \`/cerebro-ultrawork [task]\` — autonomous full-team mode (opens with the "To me, my X-Men!" catchphrase); Legion/Cypher for product-shaped work, the workflow engine executes and Cyclops audits.
 
 ## Runtime
 
@@ -156,7 +156,7 @@ This runtime uses X-Men names for OpenCode specialist prompts. The names are par
 │   ├── cerebro-plan.md
 │   ├── cerebro-start-work.md
 │   ├── cerebro-index.md
-│   └── to-me-my-x-men.md
+│   └── cerebro-ultrawork.md
 └── plugins/
 
 .cerebro/
@@ -216,7 +216,7 @@ flowchart TB
 
 | Command | Purpose |
 |---|---|
-| \`/to-me-my-x-men [task]\` | Autonomous execution for clear tasks; asks before using Cerebro's own judgment on unclear product-shaped prompts. |
+| \`/cerebro-ultrawork [task]\` | Autonomous execution for clear tasks (opens with the "To me, my X-Men!" catchphrase); asks before using Cerebro's own judgment on unclear product-shaped prompts. |
 | \`/cerebro-index\` | Build or refresh repository context. |
 | \`/cerebro-plan [task]\` | Interview-first planning with Professor X. |
 | \`/cerebro-start-work\` | Execute or resume the latest Cerebro plan. |
@@ -256,7 +256,7 @@ flowchart TB
 
 ## Package Updates
 
-Open X-Men is package-managed. To refresh the plugin package/config cache: \`bunx open-xmen@latest install\`. Use \`install --with-runtime-files --reset\` only for legacy managed runtime files.
+Open X-Men is package-managed and plugin-only. To refresh the plugin package/config cache and re-install the global skills: \`bunx open-xmen@latest install\`. No project runtime files are written.
 
 ## Skills
 
@@ -272,11 +272,11 @@ Cerebro turns OpenCode into a coordinated X-Men-themed agent workflow using nati
 |---|---|---|
 | Simple | Ask normally | Explanation, small command, single obvious edit. |
 | New repo or stale context | \`/cerebro-index\` | Build \`.cerebro/project-context.md\` before planning or execution. |
-| Clear implementation | \`/to-me-my-x-men [task]\` | Clear goal, low/medium risk, no long interview needed. |
+| Clear implementation | \`/cerebro-ultrawork [task]\` | Clear goal, low/medium risk, no long interview needed. |
 | Complex or risky | \`/cerebro-plan [task]\` then \`/cerebro-start-work\` | Multi-step feature, architecture change, migration, security, data, production impact. |
 | Interrupted plan | \`/cerebro-start-work\` | Continue from \`.cerebro/boulder.json\`. |
 
-If the user explicitly invokes \`/to-me-my-x-men\` for ambiguous or product-shaped work, Cerebro asks only for blockers it cannot infer safely. Otherwise Legion and Cypher record assumptions in customer/requirements notepads before Professor X, Beast, Emma Frost, and the workers proceed.
+If the user explicitly invokes \`/cerebro-ultrawork\` for ambiguous or product-shaped work, Cerebro asks only for blockers it cannot infer safely. Otherwise Legion and Cypher record assumptions in customer/requirements notepads before Professor X, Beast, Emma Frost, and the workers proceed.
 
 ## Three-Layer Architecture
 
@@ -347,7 +347,7 @@ Legacy \`.claude/\` files may exist as migration source or compatibility materia
 ## Quick Start
 
 \`\`\`text
-/to-me-my-x-men add request validation to the API
+/cerebro-ultrawork add request validation to the API
 /cerebro-index
 /cerebro-plan redesign the authentication flow
 /cerebro-start-work
@@ -359,13 +359,13 @@ Legacy \`.claude/\` files may exist as migration source or compatibility materia
 |---|---|---|
 | Direct | Ask normally | The request is simple and low-risk. |
 | Index | \`/cerebro-index\` | Build project context for faster future work. |
-| Autonomous | \`/to-me-my-x-men [task]\` | The task is clear and should be executed end to end. |
+| Autonomous | \`/cerebro-ultrawork [task]\` | The task is clear and should be executed end to end. |
 | Planning | \`/cerebro-plan [task]\` | Requirements are complex, ambiguous, high-impact, or need approval. |
 | Execution | \`/cerebro-start-work\` | A plan exists and should be executed or resumed. |
 
-Package updates are npm-managed. Re-run \`bunx open-xmen@latest install\` to refresh the plugin config/cache without writing project runtime files. Use \`install --with-runtime-files --reset\` only when you intentionally want to refresh legacy managed \`.opencode/\`, \`.cerebro/\`, and \`AGENTS.md\` files.
+Package updates are npm-managed. Open X-Men is plugin-only: re-run \`bunx open-xmen@latest install\` to refresh the plugin config/cache and re-install the global skills. No \`.opencode/\`, \`.cerebro/\`, or \`AGENTS.md\` files are written into your project.
 
-When \`/to-me-my-x-men\` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and the workflow engine executes the plan deterministically — parallel dependency frontiers, shell verification, bounded retries — with Cyclops auditing the final result.
+When \`/cerebro-ultrawork\` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and the workflow engine executes the plan deterministically — parallel dependency frontiers, shell verification, bounded retries — with Cyclops auditing the final result.
 
 ## Recommended Reading
 
@@ -376,7 +376,24 @@ When \`/to-me-my-x-men\` receives an unclear full-product prompt, it asks only f
 ` },
   { path: ".cerebro/docs/skill-policy.md", content: `# Skill Policy
 
-Cerebro ships without required skills. Skills can be added later as optional overlays.
+Cerebro ships skills only as optional overlays — the base workflow never requires one. \`open-xmen install\` writes the plugin's skills into the global OpenCode config dir (\`~/.config/opencode/skills/<name>/SKILL.md\`), where OpenCode discovers them automatically. Plugin skills are namespaced with an \`opx-\` prefix so they group together and never collide with your own.
+
+## Bundled Skills
+
+- **\`opx-frontend-design\`** — distinctive, production-grade frontend aesthetics that avoid generic "AI slop." Jean Grey draws on it when shaping a design spec's aesthetic direction; Storm draws on it when implementing the visual layer (typography, color, motion, backgrounds).
+- **\`opx-git\`** — disciplined Git: atomic commits in the repo's own style, safe rebase/squash (never rewrite pushed history or force-push without approval), and history archaeology (blame/pickaxe/bisect). Cerebro owns Git workflow (commits, history, PRs); workers focus on code and tests.
+- **\`opx-playwright\`** — real-browser automation and UI verification (rendering, interactions, responsive, accessibility, login flows, link health). Prefers the Playwright MCP server when available, else \`npx playwright\`. **Cyclops owns interactive browser verification** at the audit gate; Wolverine and Storm build and write tests, they do not eyeball in a browser themselves.
+
+All three are optional: agents with \`skill: allow\` (Jean Grey + Storm for design, Cerebro for git, Cyclops for playwright) use them when present and fall back to their base prompts when absent.
+
+## Optional MCP Servers
+
+\`open-xmen install\` can enable optional MCP servers (multi-select, or \`--mcp <list>\`). The choice is saved to \`open-xmen.json\` (\`mcp_servers\`) and the plugin registers them in OpenCode config at load — off by default so nothing extra runs unless you opt in:
+
+- **\`playwright\`** (\`npx @playwright/mcp\`) — structured browser tools for the \`opx-playwright\` skill (Cyclops's audit-gate UI verification).
+- **\`semble\`** (\`uvx --from "semble[mcp]" semble\`) — fast code search used by Nightcrawler; returns only relevant chunks (~98% fewer tokens than grep+read).
+
+Re-run install (or edit \`open-xmen.json\`) to change the set later.
 
 ## Rules
 
@@ -389,6 +406,7 @@ Cerebro ships without required skills. Skills can be added later as optional ove
 
 ## Good Uses
 
+- Jean Grey and Storm use the \`opx-frontend-design\` skill to commit to a bold, intentional aesthetic for UI work.
 - Storm uses an available browser or accessibility skill to verify UI behavior.
 - Wolverine uses an available language or test skill to run a focused suite.
 - Sage uses an available docs skill to fetch more precise API references.
@@ -435,7 +453,13 @@ Pass \`--index .cerebro/semble-index\` to searches. Reindex if the codebase chan
 
 This runtime uses one canonical role-slot table. Agent frontmatter, \`cerebro_model_slots\`, command defaults, docs, and validators must agree with these slots.
 
-## Primary Model Table
+## Provider Presets
+
+\`open-xmen install\` asks which model subscription(s) you have (OpenAI, Anthropic, or both — multi-select) and a focus (**performance / balance / cost**), then writes \`~/.config/opencode/open-xmen.json\` (e.g. \`{ "providers": ["anthropic"], "focus": "balance" }\`). The plugin reads it at load and picks, **per slot, the best model for that agent's job across the subscriptions you actually own** — so with both providers you get genuine best-of-breed (e.g. Claude Opus for the auditor, GPT-5.5 for coding), and with one you get the best available within it.
+
+Resolution order per slot: \`CEREBRO_MODEL_<SLOT>\` env override → legacy env → installed preset → built-in default (the table below). Image generation is OpenAI-only (Anthropic has no image model), so the image slot always resolves to \`openai/gpt-image-2\`.
+
+## Default Model Table (no preset configured — OpenAI / balance baseline)
 
 | Slot | Default model | Variant | Agents |
 |---|---|---|---|
@@ -665,7 +689,7 @@ Use \`orchestrator\` for Cerebro command interpretation, \`auditor\` for the fin
     },
     "command": {
       "type": "string",
-      "enum": ["/to-me-my-x-men", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index"]
+      "enum": ["/cerebro-ultrawork", "/cerebro-plan", "/cerebro-start-work", "/cerebro-index"]
     },
     "status": {
       "type": "string",
@@ -1252,7 +1276,7 @@ REQUIRED_COMMANDS = {
     "cerebro-index",
     "cerebro-plan",
     "cerebro-start-work",
-    "to-me-my-x-men",
+    "cerebro-ultrawork",
 }
 MODEL_PATTERN = re.compile(r"(?:openai|anthropic|minimax)/[A-Za-z0-9._/-]+")
 REQUIRED_SLOTS = {
@@ -1379,7 +1403,7 @@ from pathlib import Path
 
 
 ALLOWED_COMMANDS = {
-    "/to-me-my-x-men",
+    "/cerebro-ultrawork",
     "/cerebro-plan",
     "/cerebro-start-work",
     "/cerebro-index",
@@ -2026,7 +2050,7 @@ Conservative, reversible choices made without explicit user input:
   { path: ".cerebro/templates/team-run.json", content: `{
   "version": 1,
   "run_id": "20260522-000000-example-run",
-  "command": "/to-me-my-x-men",
+  "command": "/cerebro-ultrawork",
   "status": "planning",
   "lead": "cerebro",
   "team_name": "replace-with-team-name",
@@ -2110,6 +2134,7 @@ permission:
   webfetch: ask
   task: allow
   question: allow
+  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2134,27 +2159,43 @@ Every run ends with an **audit wave**: the engine dispatches Cyclops to cross-ch
 
 ## Request Classification and Routing
 
-When a user gives you a request, classify it and route — do not plan or act inline.
+**Never invoke a workflow silently.** There are two entry paths:
 
-| Request type | Required flow |
+- **Direct slash command** (\`/cerebro-ultrawork\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, \`/cerebro-index\`): honor it exactly as written. The user already chose — do not ask which workflow to use.
+- **Natural conversation** (no slash command): classify the request, propose the best-fit workflow, and **confirm with the user before invoking anything — even when only one workflow fits.** Do not call \`cerebro_run_start\` or dispatch any agent until the user confirms.
+
+| Request type | Best-fit workflow |
 |---|---|
-| Build / create / implement / develop / add feature (autonomous — no follow-up questions) | \`/to-me-my-x-men\` |
-| Plan first, then execute (user wants to review the plan before work starts) | \`/cerebro-plan\` then \`/cerebro-start-work\` |
-| Resume / continue previous work | Read \`.cerebro/boulder.json\`, re-run \`cerebro_execute_workflow\` with the run_id — the engine resumes from the task ledger |
-| Index / map the codebase | \`/cerebro-index\` |
-| Simple question, explanation, or lookup | Answer directly — no flow needed |
+| Build / create / implement / develop / add a feature / fix a bug | Build flow — confirm the autonomy level (below) |
+| Index / map the codebase | \`/cerebro-index\` (confirm first) |
+| Resume / continue previous work | Read \`.cerebro/boulder.json\`, re-run \`cerebro_execute_workflow\` with the run_id (confirm first) |
+| Simple question, explanation, or lookup | Answer directly — no workflow, no confirmation |
 
-For any request that matches the first two rows:
+### Confirming a build request
 
-1. **Classify the intent sub-type**: \`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`
-2. **Announce the intent and flow** in one short line, e.g. "Detected \`build-from-scratch\` — engaging Cypher for a requirements interview before we plan."
-3. **Dispatch Cypher** with the original request and classified intent sub-type. Cypher returns a \`CLARIFY\` block with a prioritized question list.
-4. **Present Cypher's questions to the user** in a clean numbered list. Collect the user's answers.
-5. **Pass the answers back to Cypher**. Cypher evaluates and either returns another \`CLARIFY\` (round 2) or \`REQUIREMENTS_READY\`.
-6. **Repeat** until Cypher returns \`REQUIREMENTS_READY\` (max 3 rounds — Cypher uses safe defaults on round 3).
-7. **Hand REQUIREMENTS_READY to Professor X** to draft the plan.
+1. **Classify the intent sub-type** — \`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\` — and announce it in one short line.
+2. **Ask the user how to proceed** before any agent runs. Offer exactly two options:
+   - **Autonomous** — "I build it end to end now. Legion sets the product vision, I use safe defaults for anything unspecified, and I will not stop to ask you questions." (the \`/cerebro-ultrawork\` flow)
+   - **Collaborative** — "Cypher interviews you first, Professor X drafts a plan you review, then the team executes." (the \`/cerebro-plan\` → \`/cerebro-start-work\` flow)
+3. Wait for the answer. Run **only** the chosen flow — do not start either flow before the user picks.
 
-Cerebro presents the questions in its own voice — do not expose Cypher's internal block format to the user. Summarize or rephrase if needed for clarity.
+### Autonomous build flow
+
+Chosen **Autonomous**, or invoked directly via \`/cerebro-ultrawork\`. Open with the catchphrase **"To me, my X-Men!"** on its own line. There is **no CLARIFY interview** — autonomous means autonomous:
+
+1. **Legion** (product-shaped work): produce \`CUSTOMER_VISION_READY\` from the request and codebase. No user questions.
+2. **Cypher** (\`MODE: autonomous\`): produce \`REQUIREMENTS_READY\` directly, using safe defaults and documenting every assumption. Never emit a \`CLARIFY\` block in this mode.
+3. **Professor X** drafts the plan; **Beast** gap-reviews; **Emma Frost** validates HIGH-risk work.
+4. Create task records and call \`cerebro_execute_workflow\`.
+
+### Collaborative plan-first flow
+
+Chosen **Collaborative**, or invoked directly via \`/cerebro-plan\`:
+
+1. **Cypher** (\`MODE: interactive\`): returns a \`CLARIFY\` block with a prioritized question list.
+2. **Present the questions in Cerebro's own voice** as a clean numbered list — never expose Cypher's raw block format. Collect the user's answers and pass them back.
+3. **Repeat** until Cypher returns \`REQUIREMENTS_READY\` (max 3 rounds — Cypher uses safe defaults on round 3).
+4. **Professor X** drafts the plan for the user to review; **Beast**/**Emma Frost** review. After approval, \`/cerebro-start-work\` creates task records and calls \`cerebro_execute_workflow\`.
 
 ## Session Start
 
@@ -2166,6 +2207,10 @@ When the plugin injects a \`CEREBRO SESSION START\` notice with pending todos:
 4. If no: call \`cerebro_clear_pending\` to discard the todos, confirm to the user, then proceed fresh.
 
 Do not start any new work or ask other questions until the user answers this prompt.
+
+## Git
+
+When the user asks you to commit, clean up history, or open a pull request, use the \`opx-git\` skill if it is available — atomic commits in the repo's own style, and safe history operations (never rewrite pushed history or force-push without explicit approval). Cerebro owns Git workflow; workers focus on code and tests.
 
 ## Todo Tracking
 
@@ -2269,6 +2314,7 @@ permission:
   webfetch: deny
   task: deny
   todowrite: deny
+  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-opus-4-8
@@ -2298,6 +2344,7 @@ If any input is missing, recover it yourself: read the plan file, read \`.cerebr
 5. **Hunt missed work.** Plan tasks with no corresponding diff, TODO/FIXME/stub markers left in changed files, acceptance criteria with no implementing task.
 6. **Hunt test gaps.** Tasks whose plan specified TDD but whose diff contains no test changes; behavior changes with no covering test.
 7. **Re-verify cheaply.** Re-run the plan's headline verification commands yourself (build, typecheck, test suite) when they complete in reasonable time. Trust your own run over recorded evidence when they disagree.
+8. **Verify UI in a real browser (your job alone).** For any UI-facing acceptance criterion, use the \`opx-playwright\` skill to actually drive the browser — confirm rendering, interaction states, responsive breakpoints, accessibility, and key flows. The workers build and write tests; you are the one who looks. File every UI defect as a finding (\`retriable: true\` with the owning \`task_id\`) so the engine re-queues that task to Wolverine or Storm to redo.
 
 ## Discipline
 
@@ -2382,7 +2429,7 @@ You are Cypher, requirements analyst. Convert intent into structured requirement
 
 Cerebro passes you the user's request, a classified intent sub-type, and a mode:
 
-- **\`autonomous\`** — called from \`/to-me-my-x-men\`. Produce REQUIREMENTS_READY directly. Use safe defaults for anything non-inferable. Document every assumption. Do not ask any questions.
+- **\`autonomous\`** — called from \`/cerebro-ultrawork\`. Produce REQUIREMENTS_READY directly. Use safe defaults for anything non-inferable. Document every assumption. Do not ask any questions.
 - **\`interactive\`** — called from \`/cerebro-plan\`. Run an iterative interview loop: produce a prioritized question list → Cerebro collects user answers → you evaluate → repeat until confident. Maximum 3 rounds; use safe defaults on round 3.
 
 ## Interview Protocol (interactive mode only)
@@ -2534,6 +2581,7 @@ permission:
   bash: deny
   webfetch: allow
   task: deny
+  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-opus-4-8
@@ -2541,6 +2589,8 @@ options:
 # jean-grey
 
 You are Jean Grey, design strategist. Before Storm implements the visual layer, define it clearly: component specs, UX flows, interaction patterns, and design system decisions. Write all design artifacts under .cerebro/notepads/design/. Do not edit source code.
+
+When shaping the aesthetic direction for any UI work, use the \`opx-frontend-design\` skill if it is available — commit to a bold, intentional aesthetic and avoid generic "AI slop" defaults (Inter/Roboto/Arial, purple-on-white gradients, predictable layouts). Bake the skill's typography, color, motion, and composition guidance into your DESIGN_SPEC so Storm can execute it.
 
 ## Output Contracts
 
@@ -2665,6 +2715,8 @@ options:
 
 You are Nightcrawler, fast codebase scout. Stay read-only. Use glob, grep, read, and shell search to map structure, locate files, and return concise evidence with paths. Do not edit files.
 
+If Semble code-search tools are available (the \`semble\` MCP server), prefer them for locating code and finding related code — they return only the relevant chunks and are far more token-efficient than grep+read. Fall back to glob/grep/read when Semble is not present.
+
 ## Cerebro Runtime Contract
 
 - Runtime state lives in \`.cerebro/\`.
@@ -2765,6 +2817,7 @@ permission:
   webfetch: ask
   task: deny
   todowrite: allow
+  skill: allow
 options:
   model_fallbacks:
     - anthropic/claude-sonnet-4-6
@@ -2785,6 +2838,8 @@ You are Storm, visual engineering specialist. You own the visual layer: CSS/styl
 ## Storm Guardrails
 
 - Follow Jean Grey's design spec when one exists. Deviation requires explicit approval.
+- Use the \`opx-frontend-design\` skill if it is available to raise the aesthetic bar: distinctive typography, a cohesive committed palette, high-impact motion, atmospheric backgrounds, and meticulous detail. Never ship generic "AI slop" styling (Inter/Roboto/Arial, purple-on-white gradients, cookie-cutter layouts). Match implementation complexity to the design's intended intensity.
+- Produce correct, complete visuals across every state (hover/focus/active/loading/error/empty/disabled), responsive breakpoint, and accessibility requirement, and write visual assertions where the project supports them. Interactive browser verification of the finished UI belongs to Cyclops at the audit gate — don't eyeball it in a browser yourself.
 - Maintain a task-scoped todo file under \`.cerebro/pending-todos/{team}/storm/{task-id}.txt\` when running inside a Cerebro task.
 - Do not mark yourself complete until all visual states, responsiveness, and accessibility styling have been applied.
 - Never claim visual verification happened unless you actually ran the dev server or inspected captured evidence.
@@ -2843,6 +2898,8 @@ options:
 You are Wolverine, the sole implementation specialist. Own all feature logic, component structure, state management, event handling, API calls, tests, scripts, and bug fixes — backend and frontend alike. When building UI components, deliver correct structure, behavior, and semantics; do NOT apply visual styling (CSS classes, style props, animation). Storm owns the visual layer and will apply it after you finish.
 
 Use TDD when practical. Maintain task-scoped todos under .cerebro/pending-todos/{team}/{agent}/{task}.txt and remove them only as completed. Return a TASK_RESULT block with files changed, tests run, verification, and issues.
+
+Write thorough automated tests for your work — unit and integration tests, plus end-to-end test specs (e.g. Playwright files) where the plan calls for them — so the workflow engine runs them as deterministic verification. Do not interactively drive a browser to eyeball results; final browser verification belongs to Cyclops at the audit gate. Leave commits, history rewriting, and PRs to Cerebro — focus on the code and its tests.
 
 ## Cerebro Runtime Contract
 
@@ -2927,7 +2984,7 @@ Execute or resume the latest Cerebro plan.
 10. **Legion acceptance** (product-shaped plans only): if the plan includes user-facing acceptance criteria or was derived from Legion/Cypher notepads, run Legion through \`cerebro_agent_task\` for a final customer acceptance verdict. A \`CUSTOMER_VERDICT: REJECT\` creates retry tasks via \`cerebro_task_create\` and re-runs \`cerebro_execute_workflow\` before the run completes.
 11. Call \`cerebro_verify_pending\`; do not final-report while pending todos remain.
 12. Final report: plan path, files changed, tests run, verification evidence, audit verdict and findings, Legion verdict (if run), unresolved issues, workflow problem list path, rollback notes, and checkpoint paths.` },
-  { path: ".opencode/commands/to-me-my-x-men.md", content: `---
+  { path: ".opencode/commands/cerebro-ultrawork.md", content: `---
 description: Fully autonomous Cerebro full-team mode. One prompt in, complete result out — no user interaction after trigger.
 agent: cerebro
 model: openai/gpt-5.5
@@ -2940,8 +2997,8 @@ The user has given one prompt and expects a complete result with no further ques
 
 ## Required flow
 
-1. Announce maximum Cerebro power and the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`).
-2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/to-me-my-x-men\` and classified risk.
+1. Open with the exact catchphrase on its own line — **"To me, my X-Men!"** — then state the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`) in one short line.
+2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-ultrawork\` and classified risk.
 3. Emit visible progress milestones with \`cerebro_progress\` whenever the run enters a new phase or a batch of work starts/completes.
 4. **Legion** (product-shaped work only): run Legion through \`cerebro_agent_task\` to produce customer vision from the prompt and codebase. Legion writes \`CUSTOMER_VISION_READY\` under \`.cerebro/notepads/customer/\` — no user questions.
 5. **Cypher** (\`MODE: autonomous\`): run Cypher through \`cerebro_agent_task\` with the original prompt, intent sub-type, Legion's vision (if produced), and \`MODE: autonomous\`. Cypher produces \`REQUIREMENTS_READY\` directly — using safe defaults and documenting all assumptions. No CLARIFY rounds.
@@ -2959,7 +3016,7 @@ Final report: assumptions made, files changed, tests/verification, audit verdict
 This project uses the Cerebro workflow on OpenCode.
 
 - Primary runtime state lives under \`.cerebro/\`.
-- Use OpenCode commands \`/cerebro-index\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, and \`/to-me-my-x-men\` for non-trivial work.
+- Use OpenCode commands \`/cerebro-index\`, \`/cerebro-plan\`, \`/cerebro-start-work\`, and \`/cerebro-ultrawork\` for non-trivial work.
 - Preserve Cerebro role names: Legion, Cypher, Professor X, Cyclops, Wolverine, Storm, Forge, Nightcrawler, Sage, Beast, and Emma Frost.
 - Plan execution runs through the deterministic \`cerebro_execute_workflow\` engine; agents never hand-roll dispatch loops. Cyclops audits the finished run.
 - OpenCode does not provide Claude Code native team APIs; use Cerebro custom tools and OpenCode subagents/child sessions for coordination.
@@ -2967,5 +3024,136 @@ This project uses the Cerebro workflow on OpenCode.
 - Do not write generated build output (\`dist/\`, \`build/\`, \`target/\`) unless the task explicitly targets those directories.
 
 When handling a Cerebro command, read \`.cerebro/cerebro-identity.md\` and \`.cerebro/opencode/model-routing.md\` first if they are not already in context.
+` },
+  { path: "skills/opx-frontend-design/SKILL.md", content: `---
+name: opx-frontend-design
+description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, or applications. Generates creative, polished code that avoids generic AI aesthetics.
+---
+
+This skill guides creation of distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.
+
+The user provides frontend requirements: a component, page, application, or interface to build. They may include context about the purpose, audience, or technical constraints.
+
+## Design Thinking
+
+Before coding, understand the context and commit to a BOLD aesthetic direction:
+- **Purpose**: What problem does this interface solve? Who uses it?
+- **Tone**: Pick an extreme: brutally minimal, maximalist chaos, retro-futuristic, organic/natural, luxury/refined, playful/toy-like, editorial/magazine, brutalist/raw, art deco/geometric, soft/pastel, industrial/utilitarian, etc. There are so many flavors to choose from. Use these for inspiration but design one that is true to the aesthetic direction.
+- **Constraints**: Technical requirements (framework, performance, accessibility).
+- **Differentiation**: What makes this UNFORGETTABLE? What's the one thing someone will remember?
+
+**CRITICAL**: Choose a clear conceptual direction and execute it with precision. Bold maximalism and refined minimalism both work - the key is intentionality, not intensity.
+
+Then implement working code (HTML/CSS/JS, React, Vue, etc.) that is:
+- Production-grade and functional
+- Visually striking and memorable
+- Cohesive with a clear aesthetic point-of-view
+- Meticulously refined in every detail
+
+## Frontend Aesthetics Guidelines
+
+Focus on:
+- **Typography**: Choose fonts that are beautiful, unique, and interesting. Avoid generic fonts like Arial and Inter; opt instead for distinctive choices that elevate the frontend's aesthetics; unexpected, characterful font choices. Pair a distinctive display font with a refined body font.
+- **Color & Theme**: Commit to a cohesive aesthetic. Use CSS variables for consistency. Dominant colors with sharp accents outperform timid, evenly-distributed palettes.
+- **Motion**: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions. Use scroll-triggering and hover states that surprise.
+- **Spatial Composition**: Unexpected layouts. Asymmetry. Overlap. Diagonal flow. Grid-breaking elements. Generous negative space OR controlled density.
+- **Backgrounds & Visual Details**: Create atmosphere and depth rather than defaulting to solid colors. Add contextual effects and textures that match the overall aesthetic. Apply creative forms like gradient meshes, noise textures, geometric patterns, layered transparencies, dramatic shadows, decorative borders, custom cursors, and grain overlays.
+
+NEVER use generic AI-generated aesthetics like overused font families (Inter, Roboto, Arial, system fonts), cliched color schemes (particularly purple gradients on white backgrounds), predictable layouts and component patterns, and cookie-cutter design that lacks context-specific character.
+
+Interpret creatively and make unexpected choices that feel genuinely designed for the context. No design should be the same. Vary between light and dark themes, different fonts, different aesthetics. NEVER converge on common choices (Space Grotesk, for example) across generations.
+
+**IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
+
+Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
+` },
+  { path: "skills/opx-git/SKILL.md", content: `---
+name: opx-git
+description: Disciplined Git workflows — atomic commits with repo-matched style, safe rebase/squash, and history archaeology (blame, pickaxe, bisect). Use when committing changes, cleaning up history, or investigating when/why/by-whom code changed.
+---
+
+This skill makes Git operations disciplined and reviewable. Use it whenever you commit, reshape history, or investigate the past. It never commits, pushes, or rewrites history on its own — it acts only on an explicit request, and history-rewriting or force-push is gated behind the user's approval.
+
+## 1. Read the repo before you act
+
+Gather context in parallel: \`git status\`, \`git diff\`, \`git diff --staged\`, and \`git log --oneline -30\`. Detect the merge base with \`git merge-base HEAD main\` (fall back to \`master\`).
+
+**Match the existing commit style** — infer it from the last ~30 commits, do not impose one:
+- *Semantic* (\`feat:\`, \`fix:\`, \`chore:\` …) only if the history clearly uses it.
+- *Plain* natural-language subjects if that dominates.
+- *Short* 1–3 word subjects if that is the norm.
+- Mirror the repo's language and capitalization conventions.
+
+## 2. Commit atomically
+
+Default to **multiple small commits**, not one large one. A change that spans different directories, component types, or independent concerns should be split so each commit is individually revertible and reviewable.
+
+- Rough floor: about \`ceil(files_changed / 3)\` commits for a multi-file change — but cohesion wins over arithmetic.
+- Keep tests with the implementation they cover; never split a test from its code.
+- Order dependency-first: utilities → models → services → API/UI → config.
+- If a single commit must touch many files, say in one sentence why they are one cohesive change.
+- Verify each staged set with \`git diff --staged --stat\` before committing.
+
+Avoid: one giant commit across unrelated files; grouping by file type instead of by feature; vague messages ("update stuff", "related changes").
+
+## 3. Reshape history safely
+
+- **Never rewrite history that has been pushed or shared without explicit user approval**, and **never rebase \`main\`/\`master\`**.
+- Interactive squash/reorder: \`git rebase -i <base>\`; apply fixups with \`GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash\`.
+- Create fixups with \`git commit --fixup <sha>\` so autosquash can fold them.
+- Resolve conflicts by editing, \`git add\` the resolved files, then \`git rebase --continue\`.
+- Force-push only with \`--force-with-lease\`, never a bare \`--force\`, and only after approval.
+
+## 4. Investigate history (archaeology)
+
+- *When was a string added/removed?* pickaxe: \`git log -S"<string>" --oneline\` (use \`-G"<regex>"\` to match diff patterns).
+- *Who wrote this line and when?* \`git blame -L <start>,<end> <file>\`.
+- *Which commit introduced a bug?* \`git bisect start\` / \`good\` / \`bad\` to binary-search.
+- *Full history of a file across renames?* \`git log --follow -- <file>\`.
+
+## Output
+
+When run inside a Cerebro task, fold the result into your \`TASK_RESULT\` (commits created, history actions taken with their approval, or findings). Respect plan approval gates for any destructive or history-rewriting action.
+` },
+  { path: "skills/opx-playwright/SKILL.md", content: `---
+name: opx-playwright
+description: Browser automation and UI verification with Playwright — test pages, fill forms, take screenshots, check responsive layouts, validate UX, exercise login flows, and check links. Prefers the Playwright MCP server when available; otherwise runs npx playwright scripts.
+---
+
+This skill drives a real browser to verify and automate UI work: rendering, interactions, responsive behavior, accessibility, login flows, and link health. Use it to *prove* a UI change works rather than asserting it does.
+
+## CRITICAL: detect the server first
+
+Before navigating, find the running app. Check common dev ports (\`3000\`, \`5173\`, \`8080\`, \`4321\`, \`1313\`, …) or start the project's dev server if none is up. Never assume a URL — confirm it responds, then parameterize it (don't hard-code) so the same script works across environments.
+
+## Preferred path: Playwright MCP server
+
+If Playwright MCP browser tools are available in the session (e.g. \`browser_navigate\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_take_screenshot\`, \`browser_resize\`, \`browser_console_messages\`), use them directly — they give structured page state and are the cleanest way to drive the browser inside OpenCode:
+
+1. \`browser_navigate\` to the detected URL.
+2. \`browser_snapshot\` to read the accessibility tree (prefer this over screenshots for assertions — it's structured and cheap).
+3. Interact with \`browser_click\` / \`browser_type\` / \`browser_select_option\` using roles/labels from the snapshot.
+4. \`browser_take_screenshot\` for visual evidence; \`browser_resize\` to check breakpoints; \`browser_console_messages\` to catch runtime errors.
+
+## Fallback path: npx playwright
+
+If the MCP tools are not present, write a throwaway script to \`/tmp\` (never into the project tree) and run it with \`npx playwright\`:
+
+- Ensure the browser is installed once: \`npx playwright install chromium\`.
+- Write \`/tmp/opx-pw-<task>.mjs\` using \`@playwright/test\`'s \`chromium\`, navigate, assert, and capture screenshots to \`/tmp\`.
+- Run headless in CI; use \`headless: false\` only when a human is watching.
+- Clean up \`/tmp\` scripts when done.
+
+## What to verify
+
+- **Rendering & states**: default, hover, focus, loading, error, empty, disabled.
+- **Responsive**: each required breakpoint (mobile/tablet/desktop) via viewport resize.
+- **Flows**: login, form submit/validation, navigation — assert the resulting state, not just that a click happened.
+- **Accessibility**: focus order, roles/labels in the snapshot, color-contrast-affecting states, reduced-motion.
+- **Health**: no console errors; internal links resolve (no 404s).
+
+## Output
+
+Report concrete evidence — screenshot paths, the snapshot/assertions that passed or failed, console errors. When run inside a Cerebro task, put this in the \`VERIFICATION\` section of your \`TASK_RESULT\`; never claim visual verification happened unless you actually drove the browser.
 ` },
 ];

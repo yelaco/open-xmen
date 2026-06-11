@@ -1,7 +1,7 @@
 import { defaultModelForAgent } from "../config/models.js";
 
 export const CEREBRO_COMMANDS = [
-  "/to-me-my-x-men",
+  "/cerebro-ultrawork",
   "/cerebro-plan",
   "/cerebro-start-work",
   "/cerebro-index",
@@ -93,7 +93,7 @@ Do not implement the plan in this command.`,
 12. Final report: plan path, files changed, tests run, verification evidence, audit verdict and findings, Legion verdict (if run), unresolved issues, workflow problem list path, rollback notes, and checkpoint paths.`,
   },
   {
-    name: "to-me-my-x-men",
+    name: "cerebro-ultrawork",
     description: "Fully autonomous Cerebro full-team mode. One prompt in, complete result out — no user interaction after trigger.",
     model: COMMAND_MODEL,
     content: `Assemble the full Cerebro team for autonomous execution of: $ARGUMENTS
@@ -104,8 +104,8 @@ The user has given one prompt and expects a complete result with no further ques
 
 ## Required flow
 
-1. Announce maximum Cerebro power and the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`).
-2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/to-me-my-x-men\` and classified risk.
+1. Open with the exact catchphrase on its own line — **"To me, my X-Men!"** — then state the detected intent sub-type (\`refactoring\` | \`build-from-scratch\` | \`mid-sized-task\` | \`architecture\` | \`bug-fix\`) in one short line.
+2. Call \`cerebro_model_slots\` and \`cerebro_run_start\` with command \`/cerebro-ultrawork\` and classified risk.
 3. Emit visible progress milestones with \`cerebro_progress\` whenever the run enters a new phase or a batch of work starts/completes.
 4. **Legion** (product-shaped work only): run Legion through \`cerebro_agent_task\` to produce customer vision from the prompt and codebase. Legion writes \`CUSTOMER_VISION_READY\` under \`.cerebro/notepads/customer/\` — no user questions.
 5. **Cypher** (\`MODE: autonomous\`): run Cypher through \`cerebro_agent_task\` with the original prompt, intent sub-type, Legion's vision (if produced), and \`MODE: autonomous\`. Cypher produces \`REQUIREMENTS_READY\` directly — using safe defaults and documenting all assumptions. No CLARIFY rounds.
