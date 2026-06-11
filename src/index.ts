@@ -23,12 +23,14 @@ import {
 } from "./agents/index.js";
 import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
-import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, OPTIONAL_MCP_SERVERS, enabledMcpServers, modelSlots } from "./config/models.js";
+import { AGENT_MODEL_SLOTS, CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, OPTIONAL_MCP_SERVERS, enabledMcpServers, modelSlots } from "./config/models.js";
 import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent } from "./auto-update.js";
 import type { TaskRecord, TaskStatus } from "./workflow/types.js";
 import {
   appendJsonl,
+  appendText,
   createTaskMutex,
+  failuresFile,
   loadTasks,
   mailboxFile,
   manifestFile,
@@ -39,6 +41,7 @@ import {
   safeRuntimePath,
   saveTasks,
   slug,
+  verificationLogFile,
   writeJson,
 } from "./workflow/fs.js";
 import {
@@ -46,15 +49,16 @@ import {
   childSessionID,
   hasChildSessionClient,
   isRecord,
+  parseAuditVerdict,
   parseModelID,
   resultData,
   terminalAssistantMarker,
 } from "./workflow/results.js";
 import { createEventRecorder } from "./workflow/events.js";
 import { createSessionRunner } from "./workflow/sessions.js";
-import { executeWorkflow } from "./workflow/engine.js";
 import { runVerificationCommands } from "./workflow/verify.js";
 import { summarizeLedger } from "./workflow/scheduler.js";
+import { routeReadyBatch } from "./workflow/orchestrate.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
 const RISKS = [...CEREBRO_RISKS] as const;
@@ -359,7 +363,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_task_create: tool({
-        description: "Create a task record for a Cerebro run. Include category, files, depends_on, and verification_commands when creating records from a plan so the workflow engine can route, batch, and verify deterministically.",
+        description: "Create a task record for a Cerebro run. Include category, files, depends_on, and verification_commands when creating records from a plan so cerebro_next_tasks can route and batch them and cerebro_verify can check them deterministically.",
         args: {
           run_id: tool.schema.string().min(1),
           subject: tool.schema.string().min(1),
@@ -369,7 +373,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           effort: tool.schema.enum(["low", "high"]).optional().describe("Optional model-tier override for this task: low runs it on the cheap/fast model, high on the top-reasoning model. Omit for the category's normal model."),
           verification_commands: tool.schema.array(tool.schema.string().min(1)).optional(),
           depends_on: tool.schema.array(tool.schema.string()).optional(),
-          files: tool.schema.array(tool.schema.string().min(1)).optional().describe("Repo-relative file paths this task is expected to touch; the workflow engine uses them to avoid scheduling conflicting tasks in the same parallel batch"),
+          files: tool.schema.array(tool.schema.string().min(1)).optional().describe("Repo-relative file paths this task is expected to touch; cerebro_next_tasks uses them to avoid scheduling conflicting tasks in the same parallel batch"),
         },
         execute: (args, toolContext) => mutex.serialize(args.run_id, async () => {
           const tasks = await loadTasks(ctx, args.run_id);
@@ -651,34 +655,145 @@ export const CerebroPlugin: Plugin = async (input) => {
         },
       }),
 
-      cerebro_execute_workflow: tool({
-        description: "Run the deterministic Cerebro workflow engine for a run: schedules the dependency frontier, routes tasks by category, dispatches/collects worker child sessions, runs each task's verification commands in a shell, retries failures, and finishes with a Cyclops audit wave. Blocks until complete/blocked. Re-invoke with the same run_id to resume — the engine skips tasks that are already done and verified.",
+      cerebro_next_tasks: tool({
+        description: "Return the next batch of ready tasks for a run — the dependency frontier with no unmet deps and no file conflicts — each with its routed agent and model slot. This is how Cerebro schedules deterministically while driving the orchestration loop: call it, spawn the returned tasks, verify them, then call it again. Empty `ready` with `blocked`/`deadlocked` means nothing can proceed; empty `ready` with remaining 0 means all tasks are complete (run the audit).",
         args: {
           run_id: tool.schema.string().min(1),
-          max_parallel: tool.schema.number().int().min(1).max(8).optional().describe("Max worker sessions per wave (default 4)"),
-          max_retries: tool.schema.number().int().min(0).max(5).optional().describe("Max retries per task after the first attempt (default 2)"),
-          stop_on_blocker: tool.schema.boolean().optional().describe("Stop the run when a task blocks instead of finishing the rest (default true)"),
-          audit: tool.schema.boolean().optional().describe("Dispatch the final Cyclops audit wave (default true)"),
-          verification_timeout_seconds: tool.schema.number().int().min(10).max(3600).optional().describe("Per-verification-command timeout (default 600)"),
-          overall_timeout_minutes: tool.schema.number().int().min(5).max(720).optional().describe("Overall wall-clock budget for this invocation (default 360)"),
-          plan_path: tool.schema.string().optional().describe("Repo-relative path to the active plan, passed to workers and the auditor as context"),
+          max_parallel: tool.schema.number().int().min(1).max(8).optional().describe("Max tasks to return for this wave (default 4)"),
+        },
+        async execute(args) {
+          const tasks = await loadTasks(ctx, args.run_id);
+          const next = routeReadyBatch(tasks, args.max_parallel ?? 4);
+          return JSON.stringify(next, null, 2);
+        },
+      }),
+
+      cerebro_verify: tool({
+        description: "Run a task's verification commands in a real shell and record the result on the ledger. This is the deterministic verification gate: a task only reaches status `verified` through this tool — never mark a task verified by judgment. On PASS (with commands) the task is set to `verified`; on FAIL the result is recorded and the task is left for retry/blocking; with no commands it returns SKIPPED (mark `done` via cerebro_task_update if appropriate).",
+        args: {
+          run_id: tool.schema.string().min(1),
+          task_id: tool.schema.string().min(1),
+          verification_timeout_seconds: tool.schema.number().int().min(10).max(3600).optional(),
         },
         async execute(args, toolContext) {
-          const result = await executeWorkflow(
-            { ctx, sessions, verifier: runVerificationCommands, events, mutex },
-            args,
-            toolContext,
-          );
-          return {
-            title: `workflow ${result.status}: ${result.tasks.verified + result.tasks.done}/${result.tasks.total} task(s) complete${result.audit ? `, audit ${result.audit.verdict}` : ""}`,
-            output: JSON.stringify(result, null, 2),
-            metadata: result,
-          };
+          const tasks = await loadTasks(ctx, args.run_id);
+          const task = tasks.find((entry) => entry.id === args.task_id);
+          if (!task) throw new Error(`Unknown task ${args.task_id}`);
+          const commands = task.verification_commands ?? [];
+          if (commands.length === 0) {
+            return JSON.stringify({ result: "SKIPPED", task_id: task.id, message: "No verification commands; mark done with cerebro_task_update if the work is complete." }, null, 2);
+          }
+          await recordProgress(args.run_id, { phase: "verification", status: "running", message: `running ${commands.length} command(s) for ${task.id}`, task_id: task.id }, toolContext);
+          const outcome = await runVerificationCommands(commands, {
+            cwd: ctx.worktree || ctx.directory,
+            timeoutMs: (args.verification_timeout_seconds ?? 600) * 1000,
+            signal: toolContext.abort,
+          });
+          await mutex.serialize(args.run_id, async () => {
+            const fresh = await loadTasks(ctx, args.run_id);
+            const record = fresh.find((entry) => entry.id === args.task_id);
+            if (!record) return;
+            for (const command of outcome.commands) {
+              record.verification.push({
+                at: now(),
+                result: command.pass ? "PASS" : "FAIL",
+                command: command.command,
+                notes: [command.stdout, command.stderr].filter(Boolean).join("\n").slice(-2000) || undefined,
+              });
+            }
+            if (outcome.result === "PASS") {
+              record.status = "verified";
+              record.notes.push(`${now()} verified (${outcome.commands.length} command(s) passed)`);
+            } else {
+              record.notes.push(`${now()} verification FAILED`);
+            }
+            record.updated_at = now();
+            await saveTasks(ctx, args.run_id, fresh);
+          });
+          const log = outcome.commands.map((command) =>
+            `\n## ${now()} — ${task.id}: \`${command.command}\` → ${command.pass ? "PASS" : "FAIL"} (exit ${command.exitCode}${command.timedOut ? ", timed out" : ""})\n\`\`\`text\n${[command.stdout, command.stderr].filter(Boolean).join("\n").slice(-4000)}\n\`\`\`\n`
+          ).join("");
+          await appendText(verificationLogFile(ctx, args.run_id), log).catch(() => undefined);
+          if (outcome.result === "FAIL") {
+            await appendText(failuresFile(ctx, args.run_id), `\n## ${now()} — ${task.id}\n${outcome.failureOutput ?? "verification failed"}\n`).catch(() => undefined);
+          }
+          await recordProgress(args.run_id, {
+            phase: "verification",
+            status: outcome.result === "PASS" ? "completed" : "failed",
+            message: `${outcome.result}: ${task.id}`,
+            task_id: task.id,
+            detail: outcome.failureOutput?.slice(0, 500),
+          }, toolContext);
+          return JSON.stringify({ result: outcome.result, task_id: task.id, failureOutput: outcome.failureOutput }, null, 2);
+        },
+      }),
+
+      cerebro_audit: tool({
+        description: "Run the final Cyclops audit for a run: dispatches Cyclops (read-only) to cross-check the diff, verification evidence, and acceptance criteria, and returns AUDIT_PASSED or AUDIT_FAILED with structured findings (recorded as problems). Call this once all tasks are verified, before declaring the run complete. AUDIT_FAILED findings with retriable + a task_id should be re-queued (cerebro_task_update → pending) and re-run.",
+        args: {
+          run_id: tool.schema.string().min(1),
+          plan_path: tool.schema.string().optional(),
+        },
+        async execute(args, toolContext) {
+          const tasks = await loadTasks(ctx, args.run_id);
+          const manifest = await readJson<{ objective?: string }>(manifestFile(ctx, args.run_id), {});
+          const problemsCount = existsSync(problemsFile(ctx, args.run_id))
+            ? (await readFile(problemsFile(ctx, args.run_id), "utf8")).split("\n").filter(Boolean).length
+            : 0;
+          const taskTable = tasks.map((task) => {
+            const verifications = task.verification.slice(-3).map((entry) => `${entry.result}: ${entry.command ?? "manual"}`).join("; ") || "none recorded";
+            return `- ${task.id} [${task.status}] (${task.owner}, ${task.attempts ?? 1} attempt(s)): ${task.subject}\n  files: ${(task.files ?? []).join(", ") || "undeclared"}\n  verification: ${verifications}`;
+          }).join("\n");
+          const prompt = [
+            `## Final Audit Request`, ``,
+            `RUN_ID: ${args.run_id}`,
+            `OBJECTIVE: ${manifest.objective ?? "(read the run manifest)"}`,
+            args.plan_path ? `PLAN: ${args.plan_path}` : `PLAN: locate the active plan under .cerebro/plans/`,
+            `TASK SUMMARIES:`, taskTable, ``,
+            `NOTEPADS: gotchas/verification/failures under .cerebro/notepads/${args.run_id}/ (if present)`,
+            `OPEN PROBLEM RECORDS: ${problemsCount} in .cerebro/team-runs/${args.run_id}.problems.jsonl`, ``,
+            `Every task above was executed and its verification commands were run by the orchestrator.`,
+            `You are the final gate: inspect the diff (git diff, git status), cross-check verification`,
+            `evidence against the plan's acceptance criteria, and hunt scope creep, missed work, and test gaps.`, ``,
+            `End your reply with exactly one verdict: a line containing only AUDIT_PASSED, or a line`,
+            `containing only AUDIT_FAILED followed by a fenced \`\`\`json array of findings, each with`,
+            `severity (critical|major|minor), task_id (or null), criterion, evidence, recommendation, and retriable (true|false).`,
+          ].join("\n");
+          await recordProgress(args.run_id, { phase: "audit", status: "running", message: "Cyclops audit started", agent: "cyclops" }, toolContext);
+          const dispatched = await sessions.dispatch({ run_id: args.run_id, agent: "cyclops", description: "final run audit", prompt, model_slot: AGENT_MODEL_SLOTS.cyclops }, toolContext);
+          if (!dispatched.dispatched || !dispatched.child_session_id) {
+            await recordProblem(args.run_id, { title: "Cyclops audit could not be dispatched", severity: "warning", source: "cerebro_audit", agent: "cyclops", evidence: dispatched.error }, toolContext).catch(() => undefined);
+            return JSON.stringify({ verdict: "UNAVAILABLE", findings: [] }, null, 2);
+          }
+          const collected = await sessions.collect({ run_id: args.run_id, child_session_id: dispatched.child_session_id, agent: "cyclops", poll: true }, toolContext);
+          if (!collected.collected || !collected.output) {
+            await recordProblem(args.run_id, { title: "Cyclops audit result could not be collected", severity: "warning", source: "cerebro_audit", agent: "cyclops", evidence: "error" in collected ? collected.error : collected.message }, toolContext).catch(() => undefined);
+            return JSON.stringify({ verdict: "UNAVAILABLE", findings: [] }, null, 2);
+          }
+          const { verdict, findings } = parseAuditVerdict(collected.output);
+          await recordProgress(args.run_id, {
+            phase: "audit",
+            status: verdict === "AUDIT_PASSED" ? "completed" : "failed",
+            message: verdict === "AUDIT_PASSED" ? "AUDIT_PASSED" : `${verdict ?? "no verdict"}${findings.length ? ` with ${findings.length} finding(s)` : ""}`,
+            agent: "cyclops",
+          }, toolContext);
+          for (const finding of findings) {
+            await recordProblem(args.run_id, {
+              title: `Audit finding (${finding.severity}): ${finding.criterion ?? finding.evidence ?? "see audit output"}`,
+              severity: finding.severity === "minor" ? "warning" : "error",
+              source: "cyclops-audit",
+              task_id: finding.task_id ?? undefined,
+              agent: "cyclops",
+              evidence: finding.evidence,
+              recommendation: finding.recommendation,
+            }, toolContext).catch(() => undefined);
+          }
+          return JSON.stringify({ verdict: verdict ?? "UNAVAILABLE", findings }, null, 2);
         },
       }),
 
       cerebro_dispatch_agent: tool({
-        description: "Low-level: dispatch an asynchronous OpenCode child session for a Cerebro agent and record the dispatch in the mailbox. Prefer cerebro_execute_workflow for plan execution; use this for one-off fire-and-collect flows and recovery.",
+        description: "Dispatch an asynchronous OpenCode child session for a Cerebro agent and record it in the mailbox. For driving the orchestration loop, prefer cerebro_agent_task (one synchronous spawn) or cerebro_dispatch_batch + cerebro_collect_batch_results (parallel); use this for fire-and-collect flows and recovery.",
         args: {
           run_id: tool.schema.string().min(1),
           agent: tool.schema.enum(CEREBRO_AGENTS).describe("Cerebro agent name, e.g. wolverine, nightcrawler, professor-x"),
@@ -693,7 +808,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_dispatch_batch: tool({
-        description: "Low-level: dispatch multiple independent Cerebro child sessions asynchronously in one call for parallel consultations. Prefer cerebro_execute_workflow for plan execution. Collect each child session with cerebro_collect_batch_results or cerebro_collect_result.",
+        description: "Spawn multiple independent Cerebro agents in parallel in one call — use for an orchestration wave of conflict-free tasks from cerebro_next_tasks. Collect them with cerebro_collect_batch_results.",
         args: {
           run_id: tool.schema.string().min(1),
           requests: tool.schema.array(tool.schema.object({
@@ -834,7 +949,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_collect_result: tool({
-        description: "Low-level: collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry. Pass poll: true to block until a terminal marker is seen (TASK_RESULT, DESIGN_SPEC_READY, PLAN_DRAFT, REQUIREMENTS_READY, AUDIT_PASSED, etc.). The workflow engine collects its own workers; use this for recovery and one-off dispatches.",
+        description: "Collect the latest assistant text from an asynchronous child session, record it, and optionally update a task ledger entry. Pass poll: true to block until a terminal marker is seen (TASK_RESULT, DESIGN_SPEC_READY, PLAN_DRAFT, REQUIREMENTS_READY, AUDIT_PASSED, etc.). Use after cerebro_dispatch_agent for a single spawn.",
         args: {
           run_id: tool.schema.string().min(1),
           child_session_id: tool.schema.string().min(1),

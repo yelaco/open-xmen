@@ -2,10 +2,20 @@
 
 ## Unreleased
 
-- Per-task **effort** override on `cerebro_task_create` (`low` / `high`): the engine runs that
-  task's worker on the cheap/fast model (`low`) or the top-reasoning model (`high`) without
-  changing which agent runs it; unset keeps the category's normal model. Plans can mark trivial
-  or hard tasks via the new `Effort` field.
+- **Model-driven orchestration.** Cerebro now drives the execution loop itself — spawning
+  specialist subagents and narrating each step like a personal assistant — instead of firing a
+  single blocking engine call. The monolithic `cerebro_execute_workflow` engine is removed and
+  replaced by three tools that keep determinism where it matters: `cerebro_next_tasks` (the
+  deterministic ready frontier + routing, effort-adjusted), `cerebro_verify` (runs a task's real
+  shell verification commands — the only path to status `verified`), and `cerebro_audit` (the
+  final Cyclops gate). The four-phase process (Intent Gate → Codebase Assessment → Smart
+  Delegation → Independent Verification) lives in the Cerebro agent prompt as the source of truth;
+  the optional `opx-personal-assistant` skill sharpens *how* it keeps the user informed.
+- Removed the now-vestigial `.cerebro/cerebro-identity.md` — the Cerebro agent (a `mode: primary`
+  default agent) is the single source of truth for Cerebro's identity and orchestration.
+- Per-task **effort** override on `cerebro_task_create` (`low` / `high`): runs that task's worker on
+  the cheap/fast model (`low`) or the top-reasoning model (`high`) without changing which agent
+  runs it; unset keeps the category's normal model. Plans mark trivial/hard tasks via `Effort`.
 - Four new optional `opx-` skills: `opx-test` and `opx-debug` (Wolverine), `opx-code-review`
   (Beast), and `opx-security-review` (Emma Frost). Those agents regain/gain `skill: allow`.
 - Added a GitHub Actions CI workflow (build, typecheck, `bun test`, and a generated-assets

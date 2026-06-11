@@ -59,6 +59,5 @@
 ## Read First
 
 1. `AGENTS.md` - repository-level operating rules, if present
-2. `.cerebro/cerebro-identity.md` - Cerebro runtime identity and role routing, if present
+2. The Cerebro agent prompt (the default primary agent) - Cerebro's identity, orchestration process, and role routing
 3. `.cerebro/opencode/model-routing.md` - OpenCode model slots, if present
-4. Relevant `.opencode/agents/*.md` and `.opencode/commands/*.md`, if present

@@ -1,6 +1,6 @@
 # Cerebro OpenCode Runtime
 
-Cerebro is an OpenCode plugin/runtime that pairs model intelligence with a deterministic TypeScript execution engine: agents plan, design, implement, and critique; the engine schedules, verifies, and retries; Cyclops audits the final result. Role names, cinematic command style, and the high verification bar are preserved. It gives one project a repeatable planning and execution system using OpenCode-native files:
+Cerebro is an OpenCode plugin/runtime where the model orchestrates and determinism lives in tools: Cerebro spawns X-Men specialists and drives the work step by step, narrating it like a personal assistant, while `cerebro_next_tasks` schedules deterministically, `cerebro_verify` runs real shell checks, and Cyclops audits the final result. Role names, cinematic command style, and the high verification bar are preserved. It gives one project a repeatable planning and execution system using OpenCode-native files:
 
 - `AGENTS.md` for repository-level Cerebro/OpenCode operating rules
 - `.opencode/agents/*.md` for specialist personas
@@ -32,7 +32,7 @@ Legacy `.claude/` files may exist as migration source or compatibility material,
 
 Package updates are npm-managed. Open X-Men is plugin-only: re-run `bunx open-xmen@latest install` to refresh the plugin config/cache and re-install the global skills. No `.opencode/`, `.cerebro/`, or `AGENTS.md` files are written into your project.
 
-When `/cerebro-ultrawork` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and the workflow engine executes the plan deterministically — parallel dependency frontiers, shell verification, bounded retries — with Cyclops auditing the final result.
+When `/cerebro-ultrawork` receives an unclear full-product prompt, it asks only for non-inferable blockers. Otherwise Legion and Cypher document assumptions in customer/requirements notepads, Professor X promotes them into a brief or plan, and Cerebro drives the delegation loop — deterministic scheduling, real-shell verification, bounded retries — narrating each step, with Cyclops auditing the final result.
 
 ## Recommended Reading
 

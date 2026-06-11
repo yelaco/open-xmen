@@ -20,7 +20,7 @@ Use explicit gates for destructive, irreversible, privileged, external mutating,
 
 ## Tasks
 
-Each task's `Category`, `Depends On`, `Files`, and `Verify` fields become machine-scheduled task records consumed by the Cerebro workflow engine. Keep them precise, not decorative: `Files` drives parallel-batch conflict avoidance and `Verify` commands are executed verbatim in a shell.
+Each task's `Category`, `Depends On`, `Files`, and `Verify` fields become machine-scheduled task records that Cerebro orchestrates. Keep them precise, not decorative: `Files` drives parallel-batch conflict avoidance (`cerebro_next_tasks`) and `Verify` commands are executed verbatim in a shell (`cerebro_verify`).
 
 ### Task 1: [Name]
 

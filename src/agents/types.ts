@@ -6,10 +6,10 @@ export const CEREBRO_RUNTIME_CONTRACT = `## Cerebro Runtime Contract
 - Use Cerebro custom tools for run/task/mailbox/checkpoint state when available.
 - Emit visible progress milestones with \`cerebro_progress\` at major phase changes so the user can track work without reading mailbox files. Blocking collect tools also update their visible status while polling.
 - Record workflow problems with \`cerebro_problem_report\` so failures, blockers, weak verification, missing tool support, and UX gaps become an improvement backlog.
-- When dispatching one required consultation result, use \`cerebro_agent_task\`. Plan execution belongs to \`cerebro_execute_workflow\`; do not hand-roll dispatch loops.
+- When you need one required result from a specialist, use \`cerebro_agent_task\` (or \`cerebro_dispatch_batch\` + \`cerebro_collect_batch_results\` for parallel). Cerebro drives the orchestration loop and verifies each task with \`cerebro_verify\`.
 - Preserve command names and role names.
 - Do not read \`.env\`, secret, or credential files without explicit user authorization.
-- If the Cerebro workflow engine dispatches you a plan task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\` — the engine parses this block deterministically.`;
+- If Cerebro dispatches you a plan task, report with \`TASK_RESULT:\` including \`STATUS:\`, \`FILES CHANGED:\`, \`TESTS RUN:\`, \`VERIFICATION:\`, and \`ISSUES:\` — this block is parsed deterministically.`;
 
 export type OpenCodePermissionLevel = "ask" | "allow" | "deny";
 

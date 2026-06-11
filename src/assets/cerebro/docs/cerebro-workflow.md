@@ -18,24 +18,23 @@ flowchart TB
     end
 
     Planning --> Plan[".cerebro/plans/*.md\n+ cerebro_task_create records"]
-    Plan --> Engine
+    Plan --> Loop
 
-    subgraph Engine["Execution Engine — deterministic TypeScript\n(cerebro_execute_workflow)"]
-        Frontier["Dependency frontier\nscheduling"] --> Dispatch["Category routing +\nparallel batch dispatch"]
+    subgraph Loop["Cerebro-driven delegation loop (narrated each step)"]
+        Frontier["cerebro_next_tasks\n(deterministic frontier + routing)"] --> Dispatch["Cerebro spawns specialists\n(cerebro_agent_task / dispatch_batch)"]
         Dispatch --> WJ["visual-engineering:\nJean Grey→Wolverine→Storm"]
         Dispatch --> FG["architecture: Forge"]
         Dispatch --> NC["explore: Nightcrawler"]
         Dispatch --> SG["research: Sage"]
         Dispatch --> WV["deep/quick/default:\nWolverine"]
-        WJ & FG & NC & SG & WV --> Collect["Collect TASK_RESULT\n(mailbox + task ledger)"]
-        Collect --> Verify["Shell verification\n(run Verify commands,\nrecord PASS/FAIL)"]
+        WJ & FG & NC & SG & WV --> Verify["cerebro_verify\n(real shell PASS/FAIL →\nonly path to verified)"]
         Verify -->|"FAIL (≤2 retries)"| Frontier
-        Verify -->|"all tasks verified"| Audit["Audit Wave — Cyclops\ndiff + evidence + criteria"]
+        Verify -->|"all tasks verified"| Audit["cerebro_audit — Cyclops\ndiff + evidence + criteria"]
     end
 
     Audit -->|"AUDIT_PASSED"| State[".cerebro/boulder.json\n+ team ledgers + notepads"]
-    Audit -->|"AUDIT_FAILED"| Findings["Findings → problem records\n+ re-queued tasks"] --> Engine
-    Engine -->|"blocked"| Gate
+    Audit -->|"AUDIT_FAILED"| Findings["Findings → problem records\n+ Cerebro re-queues tasks"] --> Loop
+    Loop -->|"blocked"| Gate
     State --> Result["Verified, Audited Result"]
     Index --> Context[".cerebro/project-context.md"]
 ```
@@ -67,7 +66,7 @@ flowchart TB
 | `.cerebro/plans/*.md` | Professor X | Approved implementation plans. |
 | `.cerebro/boulder.json` | Cerebro | Business-level execution checkpoint: active plan, overall status, approvals, verification history, and decisions. Task progress lives in `.cerebro/team-runs/{run-id}.tasks.json`. |
 | `.cerebro/team-runs/{run-id}.json` | Cerebro | Run manifest for command, team name, teammates, approvals, mailbox decisions, verification, and cleanup. |
-| `.cerebro/team-runs/{run-id}.tasks.json` | Cerebro / Engine | OpenCode-managed task ledger updated by `cerebro_task_create/list/update` and the workflow engine; task records created from plans must include category, dependencies, files, and verification commands. |
+| `.cerebro/team-runs/{run-id}.tasks.json` | Cerebro | OpenCode-managed task ledger updated by `cerebro_task_create/list/update` and `cerebro_verify`; task records created from plans must include category, dependencies, files, and verification commands. |
 | `.cerebro/team-runs/{run-id}.mailbox.jsonl` | Cerebro team | Mailbox log written by `cerebro_mailbox_send`, `cerebro_agent_task`, `cerebro_dispatch_agent`, `cerebro_dispatch_batch`, `cerebro_collect_result`, and `cerebro_collect_batch_results`; read by `cerebro_mailbox_read`. |
 | `.cerebro/team-runs/{run-id}.progress.jsonl` | Cerebro team | User-visible progress events and low-frequency heartbeats emitted while blocking collection is still running. |
 | `.cerebro/team-runs/{run-id}.problems.jsonl` | Cerebro team | Structured problem list for blockers, failed verification, runtime gaps, weak evidence, and workflow UX issues discovered during the run. |
@@ -75,9 +74,9 @@ flowchart TB
 | `.cerebro/notepads/{plan}/conventions.md` | Cerebro | Coding patterns, naming, file structure, UI patterns. |
 | `.cerebro/notepads/{plan}/commands.md` | Cerebro | Useful install/test/lint/build/dev commands. |
 | `.cerebro/notepads/{plan}/decisions.md` | Cerebro | Approval decisions and architectural decisions. |
-| `.cerebro/notepads/{plan}/gotchas.md` | Engine | Worker-reported GOTCHAS harvested from TASK_RESULT blocks and forwarded to later workers. |
-| `.cerebro/notepads/{plan}/failures.md` | Engine | Failed verification attempts and exact command output. |
-| `.cerebro/notepads/{plan}/verification.md` | Engine | Verification commands run, results, and pass/fail history. |
+| `.cerebro/notepads/{plan}/gotchas.md` | Cerebro | Worker-reported GOTCHAS harvested from TASK_RESULT blocks and forwarded to later workers. |
+| `.cerebro/notepads/{plan}/failures.md` | Cerebro | Failed verification attempts and exact command output (`cerebro_verify`). |
+| `.cerebro/notepads/{plan}/verification.md` | Cerebro | Verification commands run, results, and pass/fail history (`cerebro_verify`). |
 | `.cerebro/notepads/{plan}/issues.md` | Cerebro | Blockers, deferred work, unresolved risks. |
 | `.cerebro/pending-todos/{team}/{agent}/{task-id}.txt` | Wolverine / Storm | Task-scoped worker todos checked by `cerebro_verify_pending`. |
 | `.cerebro/.pending-todos` | Wolverine / Storm | Legacy worker todo file kept for backward compatibility with old runs. |
