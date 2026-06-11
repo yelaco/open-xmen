@@ -5,6 +5,50 @@ export type RuntimeAsset = {
 };
 
 export const runtimeAssets: RuntimeAsset[] = [
+  { path: "skills/opx-code-review/SKILL.md", content: `---
+name: opx-code-review
+description: Review a change for correctness bugs and reuse/simplification opportunities, with file:line evidence for every finding. Use when reviewing a diff, plan, or implementation before it ships.
+---
+
+This skill produces an evidence-backed review, not vibes. Every finding cites a concrete location and explains the consequence.
+
+## Scope the review
+
+Review the actual change set — \`git diff\` (and \`git status\` for untracked files) against the merge base, or the files named in the task. Read enough surrounding code to judge correctness; a diff hunk in isolation lies.
+
+## What to look for (in priority order)
+
+1. **Correctness bugs** — logic errors, off-by-one, wrong conditionals, unhandled error/empty/null cases, race conditions, broken invariants, resource leaks, incorrect async/await.
+2. **Contract & compatibility** — changed public APIs/types, breaking changes, missing migrations, inconsistent error handling.
+3. **Security-adjacent** — unvalidated input, injection, secret handling, unsafe defaults. (For high-risk auth/billing/data work, defer to a dedicated security review.)
+4. **Reuse & simplification** — duplicated logic that an existing helper covers, needless complexity, dead code introduced by the change.
+5. **Tests** — behavior changed without a covering test; tests that assert implementation rather than behavior.
+
+Avoid style nits the project's linter/formatter already handles. Skip speculative "could be faster" without evidence.
+
+## Output
+
+Group findings by severity (blocking / should-fix / optional). Each finding: \`file:line\`, what's wrong, the consequence, and a concrete fix. If the change is clean, say so plainly with what you checked. When run inside a Cerebro task, fold the verdict into your result block (Beast's \`GAPS FOUND\` contract).
+` },
+  { path: "skills/opx-debug/SKILL.md", content: `---
+name: opx-debug
+description: Reproduce-first debugging — isolate a failure with a minimal repro, find the root cause with evidence, fix it, and prove the fix. Use when something is broken, flaky, or behaving unexpectedly.
+---
+
+This skill enforces disciplined debugging: never guess-and-patch. Find the actual cause, then fix it.
+
+## Procedure
+
+1. **Reproduce first.** Get a reliable, minimal reproduction before changing anything — exact steps, inputs, environment, and the precise error/stack trace. If it's flaky, run it enough times to characterize the failure rate. A bug you can't reproduce, you can't confirm fixed.
+2. **Locate, don't guess.** Bisect the surface: add targeted instrumentation (logs/asserts at boundaries), use \`git bisect\` to find the introducing commit, and use code search (the \`semble\` MCP if available) or grep to trace the data/control flow. Form a hypothesis and test it before editing.
+3. **Find the root cause, not the symptom.** Ask why the bad state arose, not just where it surfaced. Fix the cause; a symptom patch that leaves the cause is a regression waiting to happen.
+4. **Fix minimally.** Make the smallest change that addresses the root cause. Avoid drive-by refactors in a debugging change.
+5. **Prove it.** Add a regression test (via the \`opx-test\` skill) that fails before the fix and passes after. Re-run the original reproduction to confirm it's resolved, and remove any temporary instrumentation.
+
+## Report
+
+In your \`TASK_RESULT\`, state the reproduction, the root cause (with file:line evidence), the fix, and the regression test + command that proves it. Note any remaining risk or related issues under \`ISSUES\`.
+` },
   { path: "skills/opx-frontend-design/SKILL.md", content: `---
 name: opx-frontend-design
 description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, or applications. Generates creative, polished code that avoids generic AI aesthetics.
@@ -135,5 +179,58 @@ If the MCP tools are not present, write a throwaway script to \`/tmp\` (never in
 ## Output
 
 Report concrete evidence — screenshot paths, the snapshot/assertions that passed or failed, console errors. When run inside a Cerebro task, put this in the \`VERIFICATION\` section of your \`TASK_RESULT\`; never claim visual verification happened unless you actually drove the browser.
+` },
+  { path: "skills/opx-security-review/SKILL.md", content: `---
+name: opx-security-review
+description: Security review of a change — find exploitable vulnerabilities with concrete evidence and severity. Use for high-risk work (auth, sessions, billing, data access, file/network/secret handling, public APIs) or when explicitly asked for a security pass.
+---
+
+This skill is a focused, high-signal security review. Report real, exploitable issues with evidence — not a generic checklist dump.
+
+## Scope
+
+Review the change set (\`git diff\` against the merge base) plus the trust boundaries it touches. Prioritize code that handles untrusted input, authentication/authorization, secrets, money, or user data.
+
+## Threats to hunt
+
+- **Injection** — SQL/NoSQL, command, path traversal, template/SSTI, XSS; any place untrusted input reaches an interpreter, query, filesystem, or markup without proper escaping/parameterization.
+- **AuthN/AuthZ** — missing or incorrect authorization checks, IDOR (object access without ownership checks), privilege escalation, auth bypass, session fixation, tokens that don't expire or aren't validated.
+- **Secrets & crypto** — hardcoded credentials, secrets in logs/errors/config committed to the repo, weak/again-rolled crypto, predictable randomness for security-sensitive values.
+- **Data exposure** — over-broad responses leaking fields, missing access scoping, sensitive data in logs.
+- **Unsafe defaults & deserialization** — permissive CORS, disabled TLS verification, untrusted deserialization, SSRF via user-controlled URLs, open redirects.
+- **Dependencies** — newly added packages with known-risky patterns or unpinned/untrusted sources.
+
+## Discipline
+
+- Every finding needs **evidence** (file:line + how it's reached) and a **severity** (critical / high / medium / low) tied to real exploitability — not theoretical.
+- Give a concrete remediation for each. Distinguish "exploitable now" from "hardening".
+- Do not weaken or bypass an existing control to "make it work". Flag, don't fix-around.
+
+## Output
+
+Findings grouped by severity with evidence + remediation; if clean, state what trust boundaries you checked. When run inside a Cerebro task, fold the verdict into your result block (Emma Frost's \`VERDICT: OKAY | REJECT\`), rejecting when an unmitigated critical/high issue exists.
+` },
+  { path: "skills/opx-test/SKILL.md", content: `---
+name: opx-test
+description: Write and run focused automated tests — unit and integration — that actually exercise the change. Use when implementing a feature or fix, or when a task's verification needs real test coverage rather than assertions of correctness.
+---
+
+This skill makes testing deliberate and evidence-producing. Tests you write become the workflow engine's deterministic verification, so they must genuinely fail when the code is wrong.
+
+## Find the project's test setup first
+
+Detect the framework and runner before writing anything: look for \`vitest\`/\`jest\`/\`bun test\`/\`pytest\`/\`go test\`/\`cargo test\` config and existing test files. Match the project's conventions — file naming, directory layout, assertion style, fixtures. Do not introduce a new framework when one exists.
+
+## Write tests that earn their keep
+
+- **Test behavior, not implementation.** Assert observable outcomes (return values, state, emitted events, HTTP responses), not internal calls — so refactors don't break tests spuriously.
+- **Cover the real cases:** the happy path, the boundaries, the error paths, and the specific bug being fixed (write the failing test first for a fix).
+- **Keep tests isolated and deterministic:** no shared mutable state, no real network/clock/randomness unless controlled. Seed or fake them.
+- **One reason to fail per test.** Prefer several small, named tests over one sprawling case.
+- **Verify the test fails first.** A test that passes against broken code proves nothing — confirm red, then green.
+
+## Run and report
+
+Run the focused suite (or the whole suite when fast) and capture the exact command + result. Pair each test file with the implementation it covers. Report the commands run and pass/fail counts in the \`TESTS RUN\` and \`VERIFICATION\` sections of your \`TASK_RESULT\`. If you could not run tests (missing deps, no runner), say so explicitly rather than claiming verification.
 ` },
 ];

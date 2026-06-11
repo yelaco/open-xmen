@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { AGENT_MODEL_SLOTS } from "../config/models.js";
+import { AGENT_MODEL_SLOTS, effortModelSlot } from "../config/models.js";
 import {
   appendText,
   failuresFile,
@@ -246,7 +246,10 @@ export async function executeWorkflow(
 
     if (route.kind === "single") {
       const prompt = buildWorkerPrompt({ task, runId, attempt, planExcerpt, gotchas, failureOutput });
-      const result = await dispatchAndCollect(task, route.agent, route.modelSlot, prompt, task.subject);
+      // A per-task effort override remaps the dispatch model tier (low→fast, high→top) without
+      // changing the agent. Chains keep their built-in per-stage tiering.
+      const modelSlot = effortModelSlot(task.effort, route.modelSlot);
+      const result = await dispatchAndCollect(task, route.agent, modelSlot, prompt, task.subject);
       return interpretWorkerResult(route.agent, result);
     }
 

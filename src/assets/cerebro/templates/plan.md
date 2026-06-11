@@ -26,6 +26,7 @@ Each task's `Category`, `Depends On`, `Files`, and `Verify` fields become machin
 
 **Owner:** Wolverine | Jean Grey | Storm | Forge consultation
 **Category:** visual-engineering | architecture | explore | research | deep | quick
+**Effort:** None | low (trivial — run on the fast/cheap model) | high (hard — run on the top-reasoning model)
 **Depends On:** None | Task [number/id]
 **Files:** `[exact/path.ext]` (modify/create) or `None`
 **What:** [Specific implementation or verification action.]
