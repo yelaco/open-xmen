@@ -35,6 +35,7 @@ import {
   now,
   problemsFile,
   progressFile,
+  readJson,
   safeRuntimePath,
   saveTasks,
   slug,
@@ -53,6 +54,7 @@ import { createEventRecorder } from "./workflow/events.js";
 import { createSessionRunner } from "./workflow/sessions.js";
 import { executeWorkflow } from "./workflow/engine.js";
 import { runVerificationCommands } from "./workflow/verify.js";
+import { summarizeLedger } from "./workflow/scheduler.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
 const RISKS = [...CEREBRO_RISKS] as const;
@@ -593,6 +595,57 @@ export const CerebroPlugin: Plugin = async (input) => {
             const recommendation = record.recommendation ? `\n  fix: ${record.recommendation}` : "";
             return `- ${record.id ?? "problem"} ${record.severity ?? "warning"}/${record.status ?? "open"}${task}${agent}${source}: ${record.title ?? ""}${recommendation}`;
           }).join("\n");
+        },
+      }),
+
+      cerebro_run_report: tool({
+        description: "Build a consolidated end-of-run report for a Cerebro run: task ledger summary, blocked/failed tasks, and workflow problems grouped by severity. Use this for the final report instead of scraping the run files manually.",
+        args: {
+          run_id: tool.schema.string().min(1),
+        },
+        async execute(args) {
+          const tasks = await loadTasks(ctx, args.run_id);
+          const ledger = summarizeLedger(tasks);
+          const manifest = await readJson<{ objective?: string; status?: string }>(manifestFile(ctx, args.run_id), {});
+
+          const blocked = tasks
+            .filter((task) => task.status === "blocked" || task.status === "failed")
+            .map((task) => `- ${task.id} [${task.status}] (${task.owner}): ${task.subject}${task.notes.at(-1) ? `\n  ${task.notes.at(-1)}` : ""}`);
+
+          const problemsPath = problemsFile(ctx, args.run_id);
+          const severityRank = ["blocker", "error", "warning", "info"] as const;
+          const counts: Record<string, number> = {};
+          const openProblems: Array<{ severity: string; title: string; task_id?: string; recommendation?: string }> = [];
+          if (existsSync(problemsPath)) {
+            for (const line of (await readFile(problemsPath, "utf8")).split("\n").filter(Boolean)) {
+              try {
+                const p = JSON.parse(line) as { severity?: string; status?: string; title?: string; task_id?: string; recommendation?: string };
+                counts[p.severity ?? "warning"] = (counts[p.severity ?? "warning"] ?? 0) + 1;
+                if ((p.status ?? "open") === "open" && (p.severity === "blocker" || p.severity === "error")) {
+                  openProblems.push({ severity: p.severity ?? "error", title: p.title ?? "", task_id: p.task_id, recommendation: p.recommendation });
+                }
+              } catch {
+                // skip malformed problem line
+              }
+            }
+          }
+
+          const lines: string[] = [
+            `# Run report: ${args.run_id}`,
+            manifest.objective ? `Objective: ${manifest.objective}` : "",
+            "",
+            `Tasks: ${ledger.verified + ledger.done}/${ledger.total} complete (verified ${ledger.verified}, done ${ledger.done}, blocked ${ledger.blocked}, failed ${ledger.failed}, pending ${ledger.pending}, active ${ledger.active})`,
+            `Problems: ${severityRank.map((s) => `${counts[s] ?? 0} ${s}`).join(", ")}`,
+          ];
+          if (blocked.length) lines.push("", "## Blocked / failed tasks", ...blocked);
+          if (openProblems.length) {
+            lines.push("", "## Open blockers & errors");
+            for (const p of openProblems) {
+              lines.push(`- ${p.severity}${p.task_id ? ` [${p.task_id}]` : ""}: ${p.title}${p.recommendation ? `\n  fix: ${p.recommendation}` : ""}`);
+            }
+          }
+          if (!blocked.length && !openProblems.length) lines.push("", "No blocked tasks or open blocker/error problems. Clean run.");
+          return lines.filter((l) => l !== undefined).join("\n");
         },
       }),
 

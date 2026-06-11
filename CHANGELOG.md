@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Added a GitHub Actions CI workflow (build, typecheck, `bun test`, and a generated-assets
+  freshness gate) so regressions are caught on PRs.
+- Added an MIT `LICENSE` and `package.json` `license` field.
+- Added `cerebro_run_report` — a consolidated end-of-run summary (task ledger, blocked/failed
+  tasks, problems grouped by severity); `/cerebro-start-work` and `/cerebro-ultrawork` call it
+  for the final report instead of pointing at raw run files.
+- Added CLI/config unit tests (`tests/cli.test.ts`) for provider/MCP argument parsing and the
+  `open-xmen.json` merge writer (the latter would have caught the earlier dropped-key bug).
+- Trimmed the asset bundle to skills only: agents/commands register through the plugin and
+  `.opencode/`/`.cerebro/` files are never installed, so they are no longer generated into
+  `generated-assets.ts` (45 → 3 assets). Removed now-dead `runtimeAssetMap`/`runtimeAssetPaths`
+  and the unused markdown generators.
+
 ## 0.3.0
 
 The rebirth release: orchestration moves out of prompts and into the plugin runtime.

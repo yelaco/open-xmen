@@ -37,6 +37,7 @@ Use the Cerebro custom tools when available:
 - `cerebro_progress_read`
 - `cerebro_problem_report`
 - `cerebro_problem_list`
+- `cerebro_run_report`
 - `cerebro_mailbox_send`
 - `cerebro_mailbox_read`
 - `cerebro_execute_workflow`

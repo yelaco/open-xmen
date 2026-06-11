@@ -1,5 +1,24 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { OPTIONAL_MCP_SERVERS, defaultModelChainForAgent, enabledMcpServers, modelSlots, resetPresetCache } from "../src/config/models.js";
+
+// Point the config-dir resolver at an empty temp dir so file-based preset resolution can't
+// read this machine's real ~/.config/opencode/open-xmen.json.
+let isolatedConfigDir: string;
+let prevConfigDir: string | undefined;
+beforeAll(() => {
+  isolatedConfigDir = mkdtempSync(`${tmpdir()}/opx-models-`);
+  prevConfigDir = process.env.OPENCODE_CONFIG_DIR;
+  process.env.OPENCODE_CONFIG_DIR = isolatedConfigDir;
+  resetPresetCache();
+});
+afterAll(() => {
+  if (prevConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR;
+  else process.env.OPENCODE_CONFIG_DIR = prevConfigDir;
+  rmSync(isolatedConfigDir, { recursive: true, force: true });
+  resetPresetCache();
+});
 
 function withEnv(key: string, value: string | undefined, fn: () => void) {
   const prev = process.env[key];

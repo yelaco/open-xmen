@@ -12,6 +12,7 @@ const expectedPackagePluginEntry = packageName;
 const requiredPackagedFiles = [
   'package.json',
   'README.md',
+  'LICENSE',
   'dist/index.js',
   'dist/index.d.ts',
   'dist/cli.js',
@@ -24,7 +25,7 @@ const requiredPackagedFiles = [
   'dist/runtime/definitions.d.ts',
 ];
 
-const allowedTopLevelFiles = new Set(['package.json', 'README.md']);
+const allowedTopLevelFiles = new Set(['package.json', 'README.md', 'LICENSE']);
 const forbiddenPackagedPathPattern = /(^|\/)\.env(\.|$|\/)|secret|credential|token|private[-_]?key|node_modules|__pycache__|\.pyc$|\.opencode\/|\.cerebro\/|\.claude\/|\.omx\/|\.sisyphus\//i;
 const expectedResolvedCommands = ['cerebro-index', 'cerebro-plan', 'cerebro-start-work', 'cerebro-ultrawork'];
 const expectedResolvedAgents = [

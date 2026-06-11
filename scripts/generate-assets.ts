@@ -1,12 +1,13 @@
 /**
  * Generate src/runtime/generated-assets.ts from source assets.
  *
- * Sources:
- *   - src/assets/cerebro/  — Cerebro runtime content (.cerebro/ files); real files, real extensions
- *   - src/assets/skills/   — OpenCode skills (skills/<name>/SKILL.md); installed to the global OpenCode config dir
- *   - src/agents/          — OpenCode agent markdown (via factories)
- *   - src/commands/        — OpenCode command markdown (via definitions)
- *   - src/assets/AGENTS.md — Repository-level operating instructions
+ * Open X-Men is plugin-only: agents and commands register through the plugin at load
+ * (from the TypeScript factories/definitions), and no .opencode/ or .cerebro/ files are
+ * written into projects. The only assets shipped at runtime are skills, which `open-xmen
+ * install` writes into the global OpenCode config dir.
+ *
+ * Source:
+ *   - src/assets/skills/  — OpenCode skills (skills/<name>/SKILL.md)
  *
  * Run with: bun scripts/generate-assets.ts
  */
@@ -14,34 +15,15 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { toOpenCodeMarkdown } from "../src/agents/markdown.ts";
-import {
-  createBeastAgent,
-  createCerebroAgent,
-  createCyclopsAgent,
-  createCypherAgent,
-  createEmmaFrostAgent,
-  createForgeAgent,
-  createJeanGreyAgent,
-  createLegionAgent,
-  createNightcrawlerAgent,
-  createProfessorXAgent,
-  createSageAgent,
-  createStormAgent,
-  createWolverineAgent,
-} from "../src/agents/index.ts";
-import { CEREBRO_COMMAND_DEFINITIONS, toOpenCodeCommandMarkdown } from "../src/commands/definitions.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const outputPath = path.join(repoRoot, "src/runtime/generated-assets.ts");
-const cerebroAssetsDir = path.join(repoRoot, "src/assets/cerebro");
 const skillsAssetsDir = path.join(repoRoot, "src/assets/skills");
 
 type Asset = { path: string; content: string };
 
-// ─── Walk a source tree into a destination prefix ────────────────────────────
-
+// Walk a source tree into a destination prefix.
 function walkAssets(rootDir: string, destPrefix: string): Asset[] {
   if (!existsSync(rootDir)) return [];
   const assets: Asset[] = [];
@@ -60,70 +42,13 @@ function walkAssets(rootDir: string, destPrefix: string): Asset[] {
   return assets;
 }
 
-// .cerebro/ runtime content and skills/ both come from real files on disk.
-// Skills install to the global OpenCode config dir (<configDir>/skills/<name>/SKILL.md).
-const walkCerebroAssets = () => walkAssets(cerebroAssetsDir, ".cerebro");
-const walkSkillAssets = () => walkAssets(skillsAssetsDir, "skills");
-
-// ─── Agent markdown from factories ───────────────────────────────────────────
-
-const agentFactories = [
-  createCerebroAgent,
-  createLegionAgent,
-  createCypherAgent,
-  createProfessorXAgent,
-  createWolverineAgent,
-  createJeanGreyAgent,
-  createStormAgent,
-  createCyclopsAgent,
-  createForgeAgent,
-  createNightcrawlerAgent,
-  createSageAgent,
-  createBeastAgent,
-  createEmmaFrostAgent,
-];
-
-function buildAgentAssets(): Asset[] {
-  return agentFactories.map((factory) => {
-    const definition = factory();
-    return {
-      path: `.opencode/agents/${definition.name}.md`,
-      content: toOpenCodeMarkdown(definition),
-    };
-  });
-}
-
-// ─── Command markdown from definitions ───────────────────────────────────────
-
-function buildCommandAssets(): Asset[] {
-  return CEREBRO_COMMAND_DEFINITIONS.map((cmd) => ({
-    path: `.opencode/commands/${cmd.name}.md`,
-    content: toOpenCodeCommandMarkdown(cmd),
-  }));
-}
-
-// ─── Assemble and write ───────────────────────────────────────────────────────
-
 function escapeContent(content: string): string {
   return content.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 }
 
 function main() {
-  const assets: Asset[] = [
-    // .cerebro/ runtime content — from real files in src/assets/cerebro/
-    ...walkCerebroAssets(),
-
-    // .opencode/ files — from TypeScript factories and definitions
-    { path: ".opencode/.gitignore", content: "node_modules\npackage.json\npackage-lock.json\nbun.lock\n.gitignore" },
-    ...buildAgentAssets(),
-    ...buildCommandAssets(),
-
-    // skills/ — optional skill overlays installed into the global OpenCode config dir
-    ...walkSkillAssets(),
-
-    // Repository-level instructions
-    { path: "AGENTS.md", content: readFileSync(path.join(repoRoot, "src/assets/AGENTS.md"), "utf8") },
-  ];
+  // Skills install to the global OpenCode config dir (<configDir>/skills/<name>/SKILL.md).
+  const assets: Asset[] = walkAssets(skillsAssetsDir, "skills");
 
   // Stable sort by path
   assets.sort((a, b) => a.path.localeCompare(b.path));

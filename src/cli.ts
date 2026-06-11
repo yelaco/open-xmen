@@ -6,6 +6,7 @@ import path from "node:path";
 import { CEREBRO_FOCUSES, CEREBRO_PROVIDERS, OPTIONAL_MCP_SERVERS, modelSlots } from "./config/models.js";
 import type { CerebroFocus, CerebroProvider } from "./config/models.js";
 import { installSkills } from "./cli/runtime.js";
+import { parseMcpArg, parseProviderArg } from "./cli/args.js";
 import { globalOpenCodeConfigDir, updateOpencodeConfig, warmOpenCodePluginCache, writeOpenXmenConfig } from "./cli/config.js";
 import { runOpenCodeDoctor } from "./cli/doctor.js";
 import { fileURLToPath } from "node:url";
@@ -201,22 +202,6 @@ function isFocus(value: string | undefined): value is CerebroFocus {
   return value !== undefined && (CEREBRO_FOCUSES as readonly string[]).includes(value);
 }
 
-// Accepts a comma-separated list of provider ids, or the shorthand "all"/"both"
-// (both = all, kept for intuition). Returns a deduped provider set. Generic over
-// CEREBRO_PROVIDERS so adding a future provider needs no change here.
-function parseProviderArg(value: string | undefined): CerebroProvider[] {
-  if (!value) return [];
-  const out: CerebroProvider[] = [];
-  for (const raw of value.split(",")) {
-    const token = raw.trim().toLowerCase();
-    if (token === "all" || token === "both") return [...CEREBRO_PROVIDERS];
-    if ((CEREBRO_PROVIDERS as readonly string[]).includes(token) && !out.includes(token as CerebroProvider)) {
-      out.push(token as CerebroProvider);
-    }
-  }
-  return out;
-}
-
 async function resolvePresetSelection(
   providers: CerebroProvider[],
   focus: CerebroFocus | undefined,
@@ -296,23 +281,6 @@ function mcpChoices(): SelectChoice[] {
     label: `${value} — ${def.description}`,
     hint: `needs ${def.requires} · ${def.usedBy}`,
   }));
-}
-
-// Parses --mcp: comma-separated server ids, "all", or "none" (empty selection). Returns the
-// list, or undefined if any token is unknown.
-function parseMcpArg(value: string | undefined): string[] | undefined {
-  if (value === undefined) return undefined;
-  const trimmed = value.trim().toLowerCase();
-  if (trimmed === "none" || trimmed === "") return [];
-  if (trimmed === "all") return Object.keys(OPTIONAL_MCP_SERVERS);
-  const out: string[] = [];
-  for (const raw of value.split(",")) {
-    const token = raw.trim().toLowerCase();
-    if (!token) continue;
-    if (!(token in OPTIONAL_MCP_SERVERS)) return undefined;
-    if (!out.includes(token)) out.push(token);
-  }
-  return out;
 }
 
 // Flag wins; otherwise multi-select on an interactive terminal; otherwise leave unchanged.
