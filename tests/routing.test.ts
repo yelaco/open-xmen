@@ -4,11 +4,11 @@ import { makeTask } from "./helpers.js";
 
 describe("resolveRoute", () => {
   test("category routes win", () => {
-    expect(resolveRoute(makeTask({ id: "a", category: "architecture" }))).toMatchObject({ kind: "single", agent: "forge", modelSlot: "planner" });
-    expect(resolveRoute(makeTask({ id: "a", category: "explore" }))).toMatchObject({ kind: "single", agent: "nightcrawler", modelSlot: "fast" });
-    expect(resolveRoute(makeTask({ id: "a", category: "research" }))).toMatchObject({ kind: "single", agent: "sage", modelSlot: "fast" });
-    expect(resolveRoute(makeTask({ id: "a", category: "deep" }))).toMatchObject({ kind: "single", agent: "wolverine", modelSlot: "workers" });
-    expect(resolveRoute(makeTask({ id: "a", category: "quick" }))).toMatchObject({ kind: "single", agent: "wolverine", modelSlot: "workers" });
+    expect(resolveRoute(makeTask({ id: "a", category: "architecture" }))).toMatchObject({ kind: "single", agent: "forge" });
+    expect(resolveRoute(makeTask({ id: "a", category: "explore" }))).toMatchObject({ kind: "single", agent: "nightcrawler" });
+    expect(resolveRoute(makeTask({ id: "a", category: "research" }))).toMatchObject({ kind: "single", agent: "sage" });
+    expect(resolveRoute(makeTask({ id: "a", category: "deep" }))).toMatchObject({ kind: "single", agent: "wolverine" });
+    expect(resolveRoute(makeTask({ id: "a", category: "quick" }))).toMatchObject({ kind: "single", agent: "wolverine" });
   });
 
   test("visual-engineering routes to the three-stage chain", () => {

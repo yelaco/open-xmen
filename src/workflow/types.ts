@@ -21,16 +21,9 @@ export type TaskRecord = {
   description: string;
   owner: string;
   category?: string;
-  effort?: "low" | "high";
   verification_commands?: string[];
   files?: string[];
   attempts?: number;
-  child_session_id?: string;
-  chain_state?: {
-    design_spec_path?: string;
-    component_files?: string[];
-    completed_stages?: string[];
-  };
   status: TaskStatus;
   depends_on: string[];
   created_at: string;

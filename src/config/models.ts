@@ -265,6 +265,97 @@ export function resetPresetCache() {
   cachedRawConfig = undefined;
 }
 
+export type AgentName = keyof typeof AGENT_MODEL_SLOTS;
+
+// A user-editable per-agent model override from open-xmen.json `agents`. Each entry is either a bare
+// model id string or an object with an explicit `model` plus optional `variant` and `fallback_models`
+// (oh-my-openagent style). Mirrored into `AgentDefinition` at registration.
+export type AgentModelOverride = { model: string; variant?: string; fallback_models?: string[] };
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isAgentName(value: string): value is AgentName {
+  return Object.prototype.hasOwnProperty.call(AGENT_MODEL_SLOTS, value);
+}
+
+// Normalizes one `agents` entry (string | object) to an AgentModelOverride, or undefined when it
+// carries no usable model id. Empty strings, missing models, and non-string fallbacks are dropped.
+function normalizeAgentEntry(value: unknown): AgentModelOverride | undefined {
+  if (typeof value === "string") {
+    const model = value.trim();
+    return model ? { model } : undefined;
+  }
+  if (isPlainObject(value)) {
+    const model = typeof value.model === "string" ? value.model.trim() : "";
+    if (!model) return undefined;
+    const variant = typeof value.variant === "string" && value.variant.trim() ? value.variant.trim() : undefined;
+    const fallback_models = Array.isArray(value.fallback_models)
+      ? value.fallback_models.filter((m): m is string => typeof m === "string" && m.trim().length > 0).map((m) => m.trim())
+      : undefined;
+    return { model, ...(variant ? { variant } : {}), ...(fallback_models && fallback_models.length ? { fallback_models } : {}) };
+  }
+  return undefined;
+}
+
+// User-editable per-agent model overrides from open-xmen.json `agents`. `install` seeds this map so
+// every agent's model is visible and individually tunable; a non-empty entry wins over the
+// focus/provider preset for that agent (a `CEREBRO_MODEL_<SLOT>` env var still wins over the file).
+// Unknown agent names and entries without a model id are ignored, and a removed entry falls back
+// through the preset.
+export function configAgentOverrides(): Partial<Record<AgentName, AgentModelOverride>> {
+  const raw = readOpenXmenConfigFile();
+  const agents = raw && isPlainObject(raw.agents) ? raw.agents : null;
+  if (!agents) return {};
+  const out: Partial<Record<AgentName, AgentModelOverride>> = {};
+  for (const [key, value] of Object.entries(agents)) {
+    const name = key.trim().toLowerCase().replace(/\s+/g, "-");
+    if (!isAgentName(name)) continue;
+    const entry = normalizeAgentEntry(value);
+    if (entry) out[name] = entry;
+  }
+  return out;
+}
+
+// The `variant` from an agent's open-xmen.json override, if any — applied over the agent's built-in
+// variant when its OpenCode config is assembled.
+export function agentVariantOverride(agent: string): string | undefined {
+  const name = agent.trim().toLowerCase();
+  if (!isAgentName(name)) return undefined;
+  return configAgentOverrides()[name]?.variant;
+}
+
+// The full slot→model table a preset would produce, computed purely from the selection (no env,
+// no persisted override). Used to seed the per-agent table; null/empty selection yields the
+// OpenAI/balance defaults.
+export function presetModelSlots(selection: PresetSelection | null): Record<CerebroModelSlot, string> {
+  return Object.fromEntries(
+    CEREBRO_MODEL_SLOT_KEYS.map((slot) => [
+      slot,
+      selection ? ownedRankedForSlot(selection, slot)[0] ?? DEFAULT_MODEL_SLOTS[slot] : DEFAULT_MODEL_SLOTS[slot],
+    ]),
+  ) as Record<CerebroModelSlot, string>;
+}
+
+// The per-agent model table a preset would produce (each agent → its slot's preset model). `install`
+// writes this into open-xmen.json `agents` as bare model strings so the mapping is visible and every
+// agent is individually editable.
+export function presetAgentModels(selection: PresetSelection | null): Record<AgentName, string> {
+  const slots = presetModelSlots(selection);
+  return Object.fromEntries(
+    (Object.keys(AGENT_MODEL_SLOTS) as AgentName[]).map((agent) => [agent, slots[AGENT_MODEL_SLOTS[agent]]]),
+  ) as Record<AgentName, string>;
+}
+
+// The effective primary model resolved for every agent (env → per-agent override → preset →
+// default). Used by `open-xmen models` to print what each agent will actually run on.
+export function agentModels(): Record<AgentName, string> {
+  return Object.fromEntries(
+    (Object.keys(AGENT_MODEL_SLOTS) as AgentName[]).map((agent) => [agent, defaultModelForAgent(agent)]),
+  ) as Record<AgentName, string>;
+}
+
 // Ranked preference for a slot, filtered to the user's owned providers (best survivor first).
 function ownedRankedForSlot(selection: PresetSelection, slot: CerebroModelSlot): string[] {
   return FOCUS_SLOT_PREFERENCES[selection.focus][slot].filter((model) => {
@@ -283,41 +374,55 @@ export function modelSlots(): Record<CerebroModelSlot, string> {
   return Object.fromEntries(CEREBRO_MODEL_SLOT_KEYS.map((slot) => [slot, modelForSlot(slot)])) as Record<CerebroModelSlot, string>;
 }
 
+// Resolves an agent's primary model. Precedence: `CEREBRO_MODEL_<SLOT>` env (and legacy) → the
+// per-agent open-xmen.json override → the slot's preset → the default mapping.
 export function defaultModelForAgent(agent: keyof typeof AGENT_MODEL_SLOTS) {
-  return modelForSlot(AGENT_MODEL_SLOTS[agent]);
+  const slot = AGENT_MODEL_SLOTS[agent];
+  const envModel = envModelForSlot(slot);
+  if (envModel) return envModel;
+  const override = configAgentOverrides()[agent];
+  if (override) return override.model;
+  return presetModelForSlot(slot);
+}
+
+// The preset-derived fallback chain for a slot, dropping whatever is already the primary. Used when a
+// per-agent override doesn't specify its own `fallback_models`.
+function presetFallbacksForAgent(agent: keyof typeof AGENT_MODEL_SLOTS, slot: CerebroModelSlot, primary: string): string[] {
+  const selection = loadPresetSelection();
+  if (selection) return ownedRankedForSlot(selection, slot).filter((model) => model !== primary).slice(0, 2);
+  return (DEFAULT_AGENT_FALLBACKS[agent] ?? []).filter((model) => model !== primary);
 }
 
 export function defaultModelChainForAgent(agent: keyof typeof AGENT_MODEL_SLOTS) {
   const slot = AGENT_MODEL_SLOTS[agent];
-  const primary = modelForSlot(slot); // env-aware
-  const selection = loadPresetSelection();
-  if (selection) {
-    // Fallbacks come from the same owned-provider ranked list, minus whatever is already primary.
-    const fallbacks = ownedRankedForSlot(selection, slot).filter((model) => model !== primary);
-    return [primary, ...fallbacks.slice(0, 2)];
+  const envModel = envModelForSlot(slot);
+  if (envModel) return [envModel, ...presetFallbacksForAgent(agent, slot, envModel)];
+  const override = configAgentOverrides()[agent];
+  if (override) {
+    // An explicit override may carry its own fallbacks; otherwise reuse the preset chain.
+    const fallbacks = override.fallback_models ?? presetFallbacksForAgent(agent, slot, override.model);
+    return [override.model, ...fallbacks];
   }
-  return [primary, ...(DEFAULT_AGENT_FALLBACKS[agent] ?? [])];
+  const primary = presetModelForSlot(slot);
+  return [primary, ...presetFallbacksForAgent(agent, slot, primary)];
 }
 
 export function isCerebroModelSlot(value: string): value is CerebroModelSlot {
   return (CEREBRO_MODEL_SLOT_KEYS as readonly string[]).includes(value);
 }
 
-// A per-task effort override remaps which slot's model a dispatch uses, without changing the
-// agent: "low" runs it on the cheap/fast tier, "high" on the top-reasoning tier (the planner
-// slot resolves to the strongest model in every preset). Unset keeps the route's own slot.
-export function effortModelSlot(effort: "low" | "high" | undefined, routeSlot: CerebroModelSlot): CerebroModelSlot {
-  if (effort === "low") return "fast";
-  if (effort === "high") return "planner";
-  return routeSlot;
-}
-
-function modelForSlot(slot: CerebroModelSlot) {
+// The `CEREBRO_MODEL_<SLOT>` (and legacy) env override for a slot, if set — the highest-priority
+// runtime override, ahead of the persisted per-agent table and the preset.
+function envModelForSlot(slot: CerebroModelSlot): string | undefined {
   const primary = process.env[MODEL_SLOT_ENV[slot]];
   if (primary) return primary;
   for (const legacyEnv of LEGACY_MODEL_SLOT_ENV[slot] ?? []) {
     const legacy = process.env[legacyEnv];
     if (legacy) return legacy;
   }
-  return presetModelForSlot(slot);
+  return undefined;
+}
+
+function modelForSlot(slot: CerebroModelSlot) {
+  return envModelForSlot(slot) ?? presetModelForSlot(slot);
 }

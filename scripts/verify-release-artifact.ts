@@ -204,9 +204,12 @@ function verifyFreshInstall(tarballPath: string) {
     if (!Array.isArray(preset.mcp_servers) || !preset.mcp_servers.includes('semble')) {
       fail(`open-xmen.json mcp_servers incorrect: ${JSON.stringify(preset)}`);
     }
+    if (!isRecord(preset.agents) || preset.agents.cyclops !== 'anthropic/claude-opus-4-8' || preset.agents.wolverine !== 'anthropic/claude-opus-4-8') {
+      fail(`open-xmen.json agents table missing or not seeded from the preset: ${JSON.stringify(preset.agents)}`);
+    }
     const modelsOut = run('node', [cliPath, 'models'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv });
     if (!modelsOut.includes('anthropic/claude-opus-4-8')) fail(`models did not reflect the anthropic preset:\n${modelsOut}`);
-    if (modelsOut.includes('"workers": "openai')) fail('anthropic-only preset should not select an OpenAI worker model');
+    if (modelsOut.includes('"wolverine": "openai')) fail('anthropic-only preset should not select an OpenAI model for Wolverine');
     const resolvedWithMcp = JSON.parse(run('opencode', ['debug', 'config'], { cwd: defaultProjectDir, env: isolatedOpenCodeEnv }));
     if (!isRecord(resolvedWithMcp.mcp) || !isRecord((resolvedWithMcp.mcp as Record<string, JsonValue>).semble)) {
       fail('enabled semble MCP server was not registered in the resolved OpenCode config');

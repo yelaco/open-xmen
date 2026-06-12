@@ -52,7 +52,33 @@ The default mapping (no preset configured — OpenAI / balance baseline):
 
 Set the preset non-interactively with flags (skips the prompt): `open-xmen install --provider anthropic --focus balance` or `--provider openai,anthropic --focus performance` (`--provider all` selects every provider).
 
-Override an individual slot with environment variables (these win over the preset):
+**Editable per-agent model mapping.** `install` also writes a per-agent table to the `agents` key of `~/.config/opencode/open-xmen.json` — one entry per agent, seeded from the preset — so the mapping is visible and every agent is individually tunable (the slots above are just the role-based defaults each agent inherits from). Pin a different model on any agent; the change wins over the preset for that agent. Each value is a model id string, or an object `{ "model", "variant", "fallback_models" }` for finer control. Delete an entry (or set it to an empty string) to fall back to the preset, and run `open-xmen models` to print the effective mapping. A reconfigure (re-running `install` with a new provider/focus) refreshes the table; a plain re-install preserves your edits.
+
+```jsonc
+// ~/.config/opencode/open-xmen.json
+{
+  "providers": ["anthropic"],
+  "focus": "performance",
+  "agents": {
+    "cerebro": "anthropic/claude-opus-4-8",
+    "cyclops": "anthropic/claude-opus-4-8",
+    "professor-x": "anthropic/claude-opus-4-8",
+    "beast": "anthropic/claude-opus-4-8",
+    "forge": "anthropic/claude-opus-4-8",
+    "emma-frost": "anthropic/claude-opus-4-8",
+    "jean-grey": "anthropic/claude-opus-4-8",
+    "legion": "anthropic/claude-opus-4-8",
+    "cypher": "anthropic/claude-opus-4-8",
+    // object form: pin a model, raise the thinking variant, set explicit fallbacks
+    "wolverine": { "model": "openai/gpt-5.5", "variant": "high", "fallback_models": ["anthropic/claude-sonnet-4-6"] },
+    "storm": "anthropic/claude-opus-4-8",
+    "nightcrawler": "anthropic/claude-sonnet-4-6",
+    "sage": "anthropic/claude-sonnet-4-6"
+  }
+}
+```
+
+Override a whole role/slot at once with environment variables (these win over both the `agents` table and the preset):
 
 ```bash
 export CEREBRO_MODEL_ORCHESTRATOR="openai/gpt-5.5"

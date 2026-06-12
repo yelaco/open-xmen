@@ -1,5 +1,3 @@
-import { effortModelSlot } from "../config/models.js";
-import type { CerebroModelSlot } from "../config/models.js";
 import { findDeadlockedTasks, pickBatch, selectFrontier, summarizeLedger } from "./scheduler.js";
 import type { LedgerSummary } from "./scheduler.js";
 import { resolveRoute } from "./routing.js";
@@ -10,10 +8,8 @@ export type ReadyTask = {
   subject: string;
   /** Primary agent to spawn. For visual-engineering this is the first chain stage (jean-grey). */
   agent: string;
-  /** Model slot to dispatch with — already adjusted for the task's effort override. */
-  model_slot: CerebroModelSlot;
   /** Sequential agent chain for visual-engineering tasks (design → structure → visual), else undefined. */
-  chain?: Array<{ agent: string; model_slot: CerebroModelSlot; stage: string }>;
+  chain?: Array<{ agent: string; stage: string }>;
 };
 
 export type NextTasks = {
@@ -39,16 +35,13 @@ export function routeReadyBatch(tasks: TaskRecord[], maxParallel = 4): NextTasks
         task_id: task.id,
         subject: task.subject,
         agent: route.stages[0].agent,
-        model_slot: route.stages[0].modelSlot,
-        chain: route.stages.map((stage) => ({ agent: stage.agent, model_slot: stage.modelSlot, stage: stage.name })),
+        chain: route.stages.map((stage) => ({ agent: stage.agent, stage: stage.name })),
       };
     }
     return {
       task_id: task.id,
       subject: task.subject,
       agent: route.agent,
-      // A per-task effort override remaps the model tier (low→fast, high→top) without changing the agent.
-      model_slot: effortModelSlot(task.effort, route.modelSlot),
     };
   });
 

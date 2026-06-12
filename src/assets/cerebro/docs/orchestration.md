@@ -26,7 +26,7 @@ Cerebro classifies the request and owns user interaction. Consultants are invoke
 - **Beast**: gap review on all plans.
 - **Emma Frost**: HIGH risk, auth, billing, migration, or data-integrity plans.
 
-Cerebro writes the approved plan to `.cerebro/plans/{slug}.md`, creates task records with `category`/`depends_on`/`files`/`verification_commands`/`effort`, then drives the delegation loop itself.
+Cerebro writes the approved plan to `.cerebro/plans/{slug}.md`, creates task records with `category`/`depends_on`/`files`/`verification_commands`, then drives the delegation loop itself.
 
 ### Execution (Cerebro-driven, deterministic tools)
 

@@ -23,7 +23,7 @@ import {
 } from "./agents/index.js";
 import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
 import { CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
-import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, OPTIONAL_MCP_SERVERS, enabledMcpServers, modelSlots } from "./config/models.js";
+import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, OPTIONAL_MCP_SERVERS, agentModels, enabledMcpServers, modelSlots } from "./config/models.js";
 import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent } from "./auto-update.js";
 import type { TaskRecord, TaskStatus } from "./workflow/types.js";
 import {
@@ -45,8 +45,8 @@ import {
 } from "./workflow/fs.js";
 import { isRecord } from "./workflow/results.js";
 import { createEventRecorder } from "./workflow/events.js";
-import { runVerificationCommands } from "./workflow/verify.js";
-import { summarizeLedger } from "./workflow/scheduler.js";
+import { findDangerousCommand, runVerificationCommands } from "./workflow/verify.js";
+import { applyVerificationFailure, claimTasks, reactivateStaleActive, summarizeLedger } from "./workflow/scheduler.js";
 import { routeReadyBatch } from "./workflow/orchestrate.js";
 
 const COMMANDS = new Set<string>(CEREBRO_COMMANDS);
@@ -191,6 +191,10 @@ export const CerebroPlugin: Plugin = async (input) => {
   const ctx = { worktree, directory };
   let sessionCheckDone = false;
   let autoUpdateScheduled = false;
+  // Runs whose stale `active` claims have been reconciled this session. The first cerebro_next_tasks
+  // call for a run resets any leftover `active` (from a crashed prior session) back to `pending`
+  // before claiming, since no claim can be genuinely in flight before this session's first batch.
+  const reconciledRuns = new Set<string>();
 
   // One mutex shared by every ledger writer (tools and engine) so load→mutate→save cycles never interleave.
   const mutex = createTaskMutex();
@@ -237,12 +241,7 @@ export const CerebroPlugin: Plugin = async (input) => {
         sessionCheckDone = true;
         try {
           const pendingRoot = safeRuntimePath(ctx, "pending-todos");
-          const legacyPendingRoot = safeRuntimePath(ctx, ".pending-todos");
-          const [current, legacy] = await Promise.all([
-            scanPendingTodos(pendingRoot),
-            scanPendingTodos(legacyPendingRoot),
-          ]);
-          const items = [...current, ...legacy];
+          const items = await scanPendingTodos(pendingRoot);
           if (items.length > 0) {
             output.system.push(
               `CEREBRO SESSION START — ${items.length} pending todo item(s) found from a previous session:\n` +
@@ -288,10 +287,10 @@ export const CerebroPlugin: Plugin = async (input) => {
 
     tool: {
       cerebro_model_slots: tool({
-        description: "Return the configured Cerebro model slots for role routing.",
+        description: "Return the configured Cerebro models: `slots` are the role/category defaults and `agents` is the model each agent actually resolves to (per-agent open-xmen.json override → preset → default). Spawned agents run on their `agents` model, which may differ from the role slot.",
         args: {},
         async execute() {
-          return JSON.stringify(modelSlots(), null, 2);
+          return JSON.stringify({ slots: modelSlots(), agents: agentModels() }, null, 2);
         },
       }),
 
@@ -362,10 +361,9 @@ export const CerebroPlugin: Plugin = async (input) => {
           description: tool.schema.string().min(1),
           owner: tool.schema.string().min(1).describe("Cerebro role or spawned agent name"),
           category: tool.schema.enum(["visual-engineering", "architecture", "explore", "research", "deep", "quick"]).optional(),
-          effort: tool.schema.enum(["low", "high"]).optional().describe("Optional model-tier override for this task: low runs it on the cheap/fast model, high on the top-reasoning model. Omit for the category's normal model."),
           verification_commands: tool.schema.array(tool.schema.string().min(1)).optional(),
           depends_on: tool.schema.array(tool.schema.string()).optional(),
-          files: tool.schema.array(tool.schema.string().min(1)).optional().describe("Repo-relative file paths this task is expected to touch; cerebro_next_tasks uses them to avoid scheduling conflicting tasks in the same parallel batch"),
+          files: tool.schema.array(tool.schema.string().min(1)).optional().describe("Repo-relative file paths this task is expected to WRITE; cerebro_next_tasks uses them to avoid co-scheduling tasks that touch the same file in a parallel batch. Pass an explicit empty array [] for read-only tasks (scouts, research, test-only) so they still parallelize. OMIT entirely only when the footprint is genuinely unknown — such a task is scheduled alone."),
         },
         execute: (args, toolContext) => mutex.serialize(args.run_id, async () => {
           const tasks = await loadTasks(ctx, args.run_id);
@@ -376,9 +374,10 @@ export const CerebroPlugin: Plugin = async (input) => {
             description: args.description,
             owner: args.owner,
             ...(args.category ? { category: args.category } : {}),
-            ...(args.effort ? { effort: args.effort } : {}),
+            // Persist files whenever provided — including an explicit [] (read-only, parallelizable),
+            // which is distinct from omitting it (unknown footprint → scheduled alone).
+            ...(args.files !== undefined ? { files: args.files } : {}),
             ...(args.verification_commands?.length ? { verification_commands: args.verification_commands } : {}),
-            ...(args.files?.length ? { files: args.files } : {}),
             status: "pending",
             depends_on: args.depends_on || [],
             created_at: now(),
@@ -605,20 +604,31 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_next_tasks: tool({
-        description: "Return the next batch of ready tasks for a run — the dependency frontier with no unmet deps and no file conflicts — each with its routed agent and model slot. This is how Cerebro schedules deterministically while driving the orchestration loop: call it, spawn the returned tasks, verify them, then call it again. Empty `ready` with `blocked`/`deadlocked` means nothing can proceed; empty `ready` with remaining 0 means all tasks are complete (run the audit).",
+        description: "Return the next batch of ready tasks for a run — the dependency frontier with no unmet deps and no file conflicts — each with its routed agent. **It claims the returned tasks** (marks them `active`) so they won't be handed out twice, which is what makes parallel waves safe: spawn ALL the returned tasks concurrently (multiple `task` calls in one message), verify each with cerebro_verify, then call this again for the next wave. Empty `ready` with `blocked`/`deadlocked` means nothing can proceed; empty `ready` with remaining 0 means all tasks are complete (run the audit).",
         args: {
           run_id: tool.schema.string().min(1),
-          max_parallel: tool.schema.number().int().min(1).max(8).optional().describe("Max tasks to return for this wave (default 4)"),
+          max_parallel: tool.schema.number().int().min(1).max(8).optional().describe("Max tasks to return (and claim) for this wave (default 4)"),
         },
-        async execute(args) {
+        execute: (args) => mutex.serialize(args.run_id, async () => {
           const tasks = await loadTasks(ctx, args.run_id);
+          let mutated = false;
+          // First call this session: recover any stale `active` claims from a crashed prior session.
+          if (!reconciledRuns.has(args.run_id)) {
+            reconciledRuns.add(args.run_id);
+            mutated = reactivateStaleActive(tasks, now());
+          }
           const next = routeReadyBatch(tasks, args.max_parallel ?? 4);
+          if (next.ready.length > 0) {
+            claimTasks(tasks, next.ready.map((entry) => entry.task_id), now());
+            mutated = true;
+          }
+          if (mutated) await saveTasks(ctx, args.run_id, tasks);
           return JSON.stringify(next, null, 2);
-        },
+        }),
       }),
 
       cerebro_verify: tool({
-        description: "Run a task's verification commands in a real shell and record the result on the ledger. This is the deterministic verification gate: a task only reaches status `verified` through this tool — never mark a task verified by judgment. On PASS (with commands) the task is set to `verified`; on FAIL the result is recorded and the task is left for retry/blocking; with no commands it returns SKIPPED (mark `done` via cerebro_task_update if appropriate).",
+        description: "Run a task's verification commands in a real shell and record the result on the ledger. This is the deterministic verification gate: a task only reaches status `verified` through this tool — never mark a task verified by judgment. On PASS (with commands) the task is set to `verified`. On FAIL it increments the task's `attempts` and requeues it (status → `pending`) so the next cerebro_next_tasks wave re-dispatches it, until it exhausts the retry budget and is auto-`blocked` (a blocker problem is recorded). With no commands it returns SKIPPED (mark `done` via cerebro_task_update if appropriate). A command that looks plainly destructive is REFUSED unrun (a blocker problem is recorded).",
         args: {
           run_id: tool.schema.string().min(1),
           task_id: tool.schema.string().min(1),
@@ -632,12 +642,33 @@ export const CerebroPlugin: Plugin = async (input) => {
           if (commands.length === 0) {
             return JSON.stringify({ result: "SKIPPED", task_id: task.id, message: "No verification commands; mark done with cerebro_task_update if the work is complete." }, null, 2);
           }
+          // cerebro_verify runs these in a real shell without OpenCode's bash-permission gate, so a
+          // model-injected destructive command would execute unprompted. Refuse the run if any command
+          // looks plainly destructive (override with OPEN_XMEN_ALLOW_UNSAFE_VERIFY=1 if intentional).
+          const dangerous = process.env.OPEN_XMEN_ALLOW_UNSAFE_VERIFY === "1" ? undefined : findDangerousCommand(commands);
+          if (dangerous) {
+            await recordProblem(args.run_id, {
+              title: `Refused a destructive-looking verification command for ${task.id}`,
+              severity: "blocker",
+              source: "verification",
+              task_id: task.id,
+              agent: task.owner,
+              evidence: dangerous,
+              recommendation: "Edit the task's verification_commands to a safe check, run the command manually, or set OPEN_XMEN_ALLOW_UNSAFE_VERIFY=1 if it is intentional.",
+            }, toolContext);
+            return JSON.stringify({ result: "REFUSED", task_id: task.id, command: dangerous, message: "Verification not run: a command looks destructive. See the recorded blocker problem." }, null, 2);
+          }
           await recordProgress(args.run_id, { phase: "verification", status: "running", message: `running ${commands.length} command(s) for ${task.id}`, task_id: task.id }, toolContext);
           const outcome = await runVerificationCommands(commands, {
             cwd: ctx.worktree || ctx.directory,
             timeoutMs: (args.verification_timeout_seconds ?? 600) * 1000,
             signal: toolContext.abort,
           });
+          // On FAIL the task is requeued (`pending`) for another attempt, or auto-blocked once it
+          // exhausts the retry budget — so a failing task can't loop forever and the next wave
+          // re-dispatches it deterministically. Captured here for the post-mutex problem report.
+          let failureStatus: "pending" | "blocked" | undefined;
+          let failureAttempts = 0;
           await mutex.serialize(args.run_id, async () => {
             const fresh = await loadTasks(ctx, args.run_id);
             const record = fresh.find((entry) => entry.id === args.task_id);
@@ -654,7 +685,9 @@ export const CerebroPlugin: Plugin = async (input) => {
               record.status = "verified";
               record.notes.push(`${now()} verified (${outcome.commands.length} command(s) passed)`);
             } else {
-              record.notes.push(`${now()} verification FAILED`);
+              failureStatus = applyVerificationFailure(record, now());
+              failureAttempts = record.attempts ?? 0;
+              record.notes.push(`${now()} verification FAILED (attempt ${failureAttempts}) → ${failureStatus}`);
             }
             record.updated_at = now();
             await saveTasks(ctx, args.run_id, fresh);
@@ -666,14 +699,27 @@ export const CerebroPlugin: Plugin = async (input) => {
           if (outcome.result === "FAIL") {
             await appendText(failuresFile(ctx, args.run_id), `\n## ${now()} — ${task.id}\n${outcome.failureOutput ?? "verification failed"}\n`).catch(() => undefined);
           }
+          // A task that has exhausted its retry budget is auto-blocked — record it as a blocker so
+          // it surfaces in cerebro_run_report and the user is told, instead of silently looping.
+          if (failureStatus === "blocked") {
+            await recordProblem(args.run_id, {
+              title: `Task blocked after ${failureAttempts} failed verification attempt(s): ${task.subject}`,
+              severity: "blocker",
+              source: "verification",
+              task_id: task.id,
+              agent: task.owner,
+              evidence: outcome.failureOutput?.slice(0, 1000),
+              recommendation: "Inspect the recorded failure output; fix the underlying issue or re-scope the task, then re-queue it (cerebro_task_update → pending).",
+            }, toolContext);
+          }
           await recordProgress(args.run_id, {
             phase: "verification",
-            status: outcome.result === "PASS" ? "completed" : "failed",
-            message: `${outcome.result}: ${task.id}`,
+            status: outcome.result === "PASS" ? "completed" : failureStatus === "blocked" ? "blocked" : "failed",
+            message: `${outcome.result}: ${task.id}${failureStatus ? ` (${failureStatus}, attempt ${failureAttempts})` : ""}`,
             task_id: task.id,
             detail: outcome.failureOutput?.slice(0, 500),
           }, toolContext);
-          return JSON.stringify({ result: outcome.result, task_id: task.id, failureOutput: outcome.failureOutput }, null, 2);
+          return JSON.stringify({ result: outcome.result, task_id: task.id, status: failureStatus, attempts: failureAttempts || undefined, failureOutput: outcome.failureOutput }, null, 2);
         },
       }),
 
@@ -699,27 +745,17 @@ export const CerebroPlugin: Plugin = async (input) => {
         },
         async execute(args) {
           const pendingRoot = safeRuntimePath(ctx, "pending-todos");
-          const legacyPendingRoot = safeRuntimePath(ctx, ".pending-todos");
           const teamName = args.team_name?.trim();
           if (teamName) assertSafeName(teamName, "team_name");
-          const [items, legacyItems] = await Promise.all([
-            scanPendingTodos(pendingRoot, teamName),
-            scanPendingTodos(legacyPendingRoot, teamName),
-          ]);
-          const total = items.length + legacyItems.length;
+          const total = (await scanPendingTodos(pendingRoot, teamName)).length;
           if (total === 0) return JSON.stringify({ cleared: 0, message: "No pending todos to clear." });
           if (teamName) {
             const teamDir = path.join(pendingRoot, teamName);
             if (existsSync(teamDir)) await rm(teamDir, { recursive: true, force: true });
-            const legacyTeamDir = path.join(legacyPendingRoot, teamName);
-            if (existsSync(legacyTeamDir)) await rm(legacyTeamDir, { recursive: true, force: true });
-          } else {
-            if (existsSync(pendingRoot)) {
-              for (const entry of await readdir(pendingRoot)) {
-                await rm(path.join(pendingRoot, entry), { recursive: true, force: true });
-              }
+          } else if (existsSync(pendingRoot)) {
+            for (const entry of await readdir(pendingRoot)) {
+              await rm(path.join(pendingRoot, entry), { recursive: true, force: true });
             }
-            if (existsSync(legacyPendingRoot)) await rm(legacyPendingRoot, { recursive: true, force: true });
           }
           return JSON.stringify({ cleared: total, message: `Cleared ${total} pending todo item(s). Starting fresh.` });
         },
@@ -730,13 +766,9 @@ export const CerebroPlugin: Plugin = async (input) => {
         args: { team_name: tool.schema.string().optional() },
         async execute(args) {
           const pendingRoot = safeRuntimePath(ctx, "pending-todos");
-          const legacyPendingRoot = safeRuntimePath(ctx, ".pending-todos");
           const teamName = args.team_name?.trim();
           if (teamName) assertSafeName(teamName, "team_name");
-          const items = [
-            ...(await scanPendingTodos(pendingRoot, teamName)),
-            ...(await scanPendingTodos(legacyPendingRoot, teamName)),
-          ];
+          const items = await scanPendingTodos(pendingRoot, teamName);
           return [items.length ? "BLOCKED" : "CLEAR", ...items.map((item) => `- ${item.line} (${item.file})`)].join("\n");
         },
       }),

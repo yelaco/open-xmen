@@ -2,6 +2,67 @@
 
 ## Unreleased
 
+- **Minor robustness mop-up.** (1) **Parallel-write safety:** a task with no declared `files` has an
+  unknown footprint, so it's no longer treated as conflict-free — it's scheduled **alone** rather than
+  co-scheduled in a parallel wave where it could clobber another task's file. A task that **explicitly
+  declares an empty `files: []`** (read-only scouts/research/test-only) is a positive "touches nothing"
+  declaration and still **fans out** in parallel — only an *omitted* `files` is treated as unknown.
+  `cerebro_task_create` now persists an explicit `[]` (previously dropped), and the planner prompt
+  tells Professor X to use an empty `Files` list for read-only tasks. (2) **Bounded mutex map:** the
+  per-run lock map now evicts a run's entry once its queue drains, instead of growing for the life of
+  the process. (3) **Correct semver ordering:** `compareSemver` (auto-update) now ranks a release above
+  a prerelease of the same core (`1.0.0` > `1.0.0-rc1`) and compares prerelease identifiers per spec,
+  instead of a lexical fallback that ordered them backwards.
+- **Crash-safe task ledger.** `.cerebro/team-runs/{run}.tasks.json` — the durability backbone the
+  resume/claim/retry logic depends on — was written with a plain `writeFile`, so a crash mid-write
+  could truncate it, and `loadTasks` threw on anything but a missing file, bricking the run. Writes
+  are now atomic (temp file → `fsync` → `rename`, so the target is always a complete old-or-new
+  version), `saveTasks` keeps a `.bak` of the prior ledger, and `loadTasks` falls back to that
+  backup on a corrupt/partial primary instead of throwing.
+- **`cerebro_verify` refuses destructive shell.** Verification commands are model-authored and run
+  in a real shell *without* OpenCode's `permission.bash: ask` gate, so an injected `curl … | sh` or
+  `rm -rf /` would have run unprompted. `cerebro_verify` now scans commands against a high-precision
+  destructive-pattern list (root/home `rm -rf`, download-piped-to-interpreter, `dd of=/dev/…`,
+  `mkfs`, fork bomb, etc.) and **refuses to run** the batch if any match, recording a blocker problem.
+  Override with `OPEN_XMEN_ALLOW_UNSAFE_VERIFY=1`. Patterns are narrow enough to allow normal test
+  commands (`rm -rf node_modules/.cache`, health-check `curl`).
+- **De-duplicated the JSONC parser.** `stripJsonComments`/`removeTrailingCommas`/`parseJsonc` were
+  copy-pasted into `cli/config.ts`, `cli/doctor.ts`, and `auto-update.ts` (three drifting copies);
+  they now live in one `src/cli/jsonc.ts` (`parseJsonc` throws, `tryParseJsonc` returns `undefined`).
+- **Safe parallel orchestration: tasks are claimed, and retries are deterministic.** Parallel waves
+  relied on the orchestrator never re-querying mid-wave — because `cerebro_next_tasks` returned
+  `pending` tasks that nothing marked in-flight, so a re-query could hand the same task out (and
+  spawn it) twice. Now `cerebro_next_tasks` **claims** its batch (`pending` → `active`) under the run
+  mutex, so the frontier never re-offers a task already dispatched; the first call per session first
+  reconciles stale `active` claims from a crashed prior session back to `pending`. `cerebro_verify`
+  on FAIL now increments `attempts` and **requeues** the task (→ `pending`, re-dispatched by the next
+  wave) until it exhausts the retry budget (`MAX_VERIFY_ATTEMPTS = 3`), at which point it auto-`blocks`
+  and records a blocker problem — so a failing task can't loop forever and the model no longer tracks
+  retry counts by hand. New pure, unit-tested scheduler helpers: `claimTasks`, `reactivateStaleActive`,
+  `applyVerificationFailure`. Cerebro/command prompts updated to spawn the whole claimed batch
+  concurrently and rely on the tool-driven requeue/block.
+- **Removed the dead per-task `effort` / `model_slot` surface.** Since the 0.4.0 move to the native
+  `task` tool (which has no per-call model override), a task's `effort` and the `model_slot` returned
+  by `cerebro_next_tasks` did nothing — yet `cerebro_task_create` still advertised that `effort`
+  changed the model. Dropped `effort` (tool arg + `TaskRecord`), `model_slot` (from `cerebro_next_tasks`
+  output and the `Route`/`ChainStage` routing types), and `effortModelSlot()`, plus the matching prompt
+  and command-definition wording, so the model is no longer told to set a knob that has no effect.
+- **Dead-field + cruft cleanup.** Removed the vestigial `child_session_id` (left over from the deleted
+  child-session subsystem) and `chain_state` `TaskRecord` fields, and dropped the legacy
+  `.cerebro/.pending-todos` dual-scan (only `.cerebro/pending-todos` is used now).
+- **`cerebro_model_slots` now also returns the resolved per-agent models.** Output is
+  `{ slots, agents }` so Cerebro can see what each agent will actually run on (per-agent override →
+  preset → default), not just the role-slot defaults — closing a gap opened by the per-agent table.
+- **Editable per-agent model mapping in `open-xmen.json` (oh-my-openagent style).** `install` now
+  writes a per-agent table to an `agents` key in `~/.config/opencode/open-xmen.json` — one entry per
+  agent, seeded from the preset — so each of the 13 agents is individually tunable instead of being
+  collapsed onto the 8 role slots. Each entry is a model id string, or an object
+  `{ model, variant?, fallback_models? }` for finer control. A non-empty entry overrides the
+  focus/provider preset for that agent; removing it (or setting it empty) falls back to the preset.
+  Per-agent precedence: `CEREBRO_MODEL_<SLOT>` env → legacy env → `agents.<name>` → preset →
+  defaults. `open-xmen models` now prints both the role slots and the resolved per-agent mapping. A
+  reconfigure (re-running `install` with a new provider/focus) refreshes the table; a plain
+  re-install preserves hand edits, and a bare non-interactive install stays side-effect-free.
 - **Audit via the native task tool; removed `cerebro_audit`, `cerebro_progress`, and the last of the
   child-session machinery.** Cerebro now spawns Cyclops for the final audit with the `task` tool
   (`subagent_type: cyclops`) like every other agent — so the audit is a **visible session** too — and

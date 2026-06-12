@@ -31,7 +31,7 @@ Re-run install (or edit `open-xmen.json`) to change the set later.
 - Skills are never required for the base workflow.
 - Agents may use a relevant available skill when it improves implementation, research, or verification.
 - If a skill is unavailable, agents continue with normal repo tools.
-- Project-local instructions, `.cerebro` contracts, approval gates, todo discipline, model/effort routing, and result envelopes override skill advice.
+- Project-local instructions, `.cerebro` contracts, approval gates, todo discipline, model routing, and result envelopes override skill advice.
 - Skills must not bypass approval gates or weaken verification requirements.
 - If skill availability changes what could be verified, report that limitation in `TASK_RESULT` or the final report.
 
