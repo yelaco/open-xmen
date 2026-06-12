@@ -16,7 +16,7 @@ Cerebro (primary agent — drives the loop, narrates every step)
         cerebro_next_tasks  → deterministic ready batch + routing (agent, chain)
         spawn specialists   → native task tool (visible sessions, parallel)
         cerebro_verify      → real shell PASS/FAIL  ← the only path to "verified"
-        retry on FAIL or mark blocked; repeat until nothing is ready
+        FAIL → deterministic auto-requeue (retry budget) or auto-block; repeat until nothing is ready
   Phase 4 Independent Verif.  → spawn Cyclops (task tool) for the audit → cerebro_run_report
   Session Continuity          → ledger + boulder.json; resume from where you stopped
 ```
@@ -50,9 +50,9 @@ The default mapping (no preset configured — OpenAI / balance baseline):
 | `fast` | `openai/gpt-5.4-mini-fast` | Nightcrawler, Sage |
 | `image` | `openai/gpt-image-2` | image/design asset generation only |
 
-Set the preset non-interactively with flags (skips the prompt): `open-xmen install --provider anthropic --focus balance` or `--provider openai,anthropic --focus performance` (`--provider all` selects every provider).
+Set the preset non-interactively with flags (skips the prompt): `open-xmen install --provider anthropic --focus balance` or `--provider openai,anthropic --focus performance` (`--provider all` selects every provider). Pick optional MCP servers the same way with `--mcp playwright,semble` (or `--mcp all` / `--mcp none`) — see [Optional MCP servers](#optional-mcp-servers).
 
-**Editable per-agent model mapping.** `install` also writes a per-agent table to the `agents` key of `~/.config/opencode/open-xmen.json` — one entry per agent, seeded from the preset — so the mapping is visible and every agent is individually tunable (the slots above are just the role-based defaults each agent inherits from). Pin a different model on any agent; the change wins over the preset for that agent. Each value is a model id string, or an object `{ "model", "variant", "fallback_models" }` for finer control. Delete an entry (or set it to an empty string) to fall back to the preset, and run `open-xmen models` to print the effective mapping. A reconfigure (re-running `install` with a new provider/focus) refreshes the table; a plain re-install preserves your edits.
+**Editable per-agent model mapping.** `install` also writes a per-agent table to the `agents` key of `~/.config/opencode/open-xmen.json` — one entry per agent, seeded from the preset — so the mapping is visible and every agent is individually tunable (the slots above are just the role-based defaults each agent inherits from). Pin a different model on any agent; the change wins over the preset for that agent. Each value is a model id string, or an object `{ "model", "variant", "fallback_models" }` for finer control. Delete an entry (or set it to an empty string) to fall back to the preset, and run `open-xmen models` to print the effective mapping. A reconfigure (re-running `install` with a new provider/focus) refreshes the table; a plain re-install preserves your edits. Whenever the installer rewrites `open-xmen.json`, it first copies the previous file to `open-xmen.json.bak`, so a hand-edited table is never lost.
 
 ```jsonc
 // ~/.config/opencode/open-xmen.json
@@ -157,15 +157,18 @@ For autonomous best-effort mode:
 
 ```bash
 open-xmen [install] [--dir <path>] [--global] [--dry-run] [--no-deps]
+open-xmen uninstall [--dir <path>] [--global] [--dry-run] [--purge]
 open-xmen doctor [--dir <path>] [--json]
 open-xmen models
 ```
 
 - No subcommand defaults to `install`, matching `bunx open-xmen@latest install` behavior.
 - Re-running `install` refreshes the OpenCode package cache and re-installs the plugin's global skills to the current package version.
-- `--dry-run` prints planned writes and does not mutate anything.
-- `opencode.jsonc` writes are atomic via `opencode.jsonc.tmp` and create `opencode.jsonc.bak` before replacing an existing config.
+- `uninstall` reverses install: it strips the `open-xmen` plugin entry from `opencode.jsonc` (clearing the `default_agent: "cerebro"` it set) and removes the global `opx-*` skills. Agents and commands are plugin-provided, so they disappear on the next OpenCode reload. `open-xmen.json` (your preset / per-agent table) is **preserved by default** so a later reinstall keeps your settings; add `--purge` to delete it (and its `.bak`) too.
+- `--dry-run` prints planned writes/removals and does not mutate anything.
+- `opencode.jsonc` writes are atomic via `opencode.jsonc.tmp` and create `opencode.jsonc.bak` before replacing an existing config; `open-xmen.json` writes back up the previous file to `open-xmen.json.bak`.
 - `doctor --json` returns script-friendly diagnostics.
+- `models` prints the resolved `{ slots, agents }` mapping (what each role slot and each agent actually run on).
 
 ## Commands
 
@@ -199,15 +202,38 @@ open-xmen models
 
 ## Skills
 
-Open X-Men ships optional skills as an overlay. `install` writes them into the global OpenCode config dir so OpenCode discovers them automatically; they are namespaced with an `opx-` prefix to group together and avoid collisions:
+Open X-Men ships optional skills as an overlay. `install` writes them into the global OpenCode config dir (`~/.config/opencode/skills/<name>/SKILL.md`) so OpenCode discovers them automatically; they are namespaced with an `opx-` prefix to group together and avoid collisions. Each is loaded on demand by the agent(s) that reference it:
 
-```text
-~/.config/opencode/skills/
-└── opx-frontend-design/
-    └── SKILL.md   # distinctive, production-grade frontend aesthetics
+| Skill | What it adds | Used by |
+|---|---|---|
+| `opx-personal-assistant` | How Cerebro narrates orchestration — plain-status updates, gate confirmations, never going silent | Cerebro |
+| `opx-frontend-design` | Distinctive, production-grade frontend aesthetics (avoids generic "AI slop") | Jean Grey, Storm |
+| `opx-test` | Writing and running focused unit/integration tests that actually exercise the change | Wolverine |
+| `opx-debug` | Reproduce-first debugging — minimal repro, evidence-backed root cause, proven fix | Wolverine |
+| `opx-git` | Disciplined Git — atomic commits, safe rebase/squash, history archaeology | Wolverine |
+| `opx-playwright` | Browser automation & UI verification (prefers the Playwright MCP server when enabled) | Cyclops |
+| `opx-code-review` | Correctness/reuse review with `file:line` evidence for every finding | Beast |
+| `opx-security-review` | Exploitable-vulnerability hunt with evidence and severity for high-risk work | Emma Frost |
+
+Skills are optional: if one is absent, the agents that reference it fall back to their base prompts. They install globally regardless of `--dir`, and `uninstall` removes them. `.cerebro/` runtime *state* (plans, team-runs, notepads, pending-todos) is created on demand by the plugin's tools at runtime — it is never installed up front.
+
+---
+
+## Optional MCP servers
+
+`install` can also enable optional [MCP](https://modelcontextprotocol.io/) servers that give agents extra tools. They are **off by default**; choose them interactively during install, or non-interactively with `--mcp <list>` (`all` / `none` accepted). Your choice is saved to the `mcp_servers` key of `~/.config/opencode/open-xmen.json`, and the plugin registers each enabled server with OpenCode at load.
+
+| Server | What it adds | Requires | Used by |
+|---|---|---|---|
+| `playwright` | Browser automation & UI verification | `npx` | `opx-playwright` (Cyclops audit gate) |
+| `semble` | Fast code search — ~98% fewer tokens than grep+read | `uvx` (uv) | Nightcrawler |
+
+```bash
+bunx open-xmen@latest install --mcp playwright,semble
+bunx open-xmen@latest install --mcp none
 ```
 
-Skills are optional: if one is absent, the agents that reference it fall back to their base prompts. `.cerebro/` runtime *state* (plans, team-runs, notepads, pending-todos) is created on demand by the plugin's tools at runtime — it is never installed up front.
+The servers install their runtime on first launch (npx/uvx cold start), so the plugin registers them with a generous startup timeout. If a server's runtime isn't available, the agents that prefer it fall back to built-in tools (e.g. Nightcrawler uses `glob`/`grep`/`read` without Semble).
 
 ---
 
@@ -220,6 +246,6 @@ npm run test
 npm run verify:release
 ```
 
-`npm run verify:release` builds the package, packs it with `npm pack --json --ignore-scripts`, checks the packaged runtime file set exactly, rejects forbidden paths such as dev-only plugin bridges or secret-like files, installs the tarball into a clean temp package, smoke-tests user-config install, project plugin-only install, runtime-file install, command/agent resolution through `opencode debug config`, plugin command/agent registration, cache-refreshing `open-xmen install`, and `open-xmen doctor`.
+`npm run verify:release` builds the package, packs it with `npm pack --json --ignore-scripts`, checks the packaged runtime file set exactly, rejects forbidden paths such as dev-only plugin bridges or secret-like files, installs the tarball into a clean temp package, and smoke-tests: the default user-config install (no project `.opencode/`/`.cerebro/` files written, global skills installed, no `open-xmen.json` for a non-interactive install), a model-preset + MCP install (`--provider anthropic --focus performance --mcp semble` — verifying the `open-xmen.json` preset and seeded `agents` table, the resolved per-agent models, and MCP-server registration through `opencode debug config`), and `open-xmen doctor`.
 
 Use `bunx open-xmen@latest install` for safe package/config refreshes outside OpenCode, and `bunx open-xmen@latest doctor [--dir <path>]` for diagnostics.
