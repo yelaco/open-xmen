@@ -34,16 +34,23 @@ export function findDeadlockedTasks(tasks: TaskRecord[]): TaskRecord[] {
   });
 }
 
-function normalizeFiles(task: TaskRecord): Set<string> {
-  return new Set((task.files ?? []).map((file) => path.normalize(file).replace(/^\.\//, "")));
+// A task's declared footprint, or undefined when `files` is omitted entirely (unknown footprint).
+// An explicit empty array is a positive declaration of "touches no files" — distinct from omitted.
+function declaredFiles(task: TaskRecord): Set<string> | undefined {
+  if (task.files === undefined) return undefined;
+  return new Set(task.files.map((file) => path.normalize(file).replace(/^\.\//, "")));
 }
 
-// Tasks with no declared files are lenient: they conflict with nothing. The planner is
-// required to declare Files per task, so undeclared means "no scheduling constraint".
+// Whether two tasks may not run in the same parallel wave. If either omits `files`, its footprint is
+// unknown — we can't prove it won't write a file the other touches, so it conflicts (and runs alone),
+// the safe default against a parallel-write clobber. When both declare their files (an empty list
+// included — e.g. a read-only scout/test task), they conflict only on a genuinely shared path, so
+// disjoint and footprint-free tasks fan out.
 export function hasFileConflict(a: TaskRecord, b: TaskRecord): boolean {
-  const aFiles = normalizeFiles(a);
-  if (aFiles.size === 0) return false;
-  for (const file of normalizeFiles(b)) {
+  const aFiles = declaredFiles(a);
+  const bFiles = declaredFiles(b);
+  if (aFiles === undefined || bFiles === undefined) return true;
+  for (const file of bFiles) {
     if (aFiles.has(file)) return true;
   }
   return false;
@@ -79,4 +86,45 @@ export function summarizeLedger(tasks: TaskRecord[]): LedgerSummary {
 
 export function allTasksComplete(tasks: TaskRecord[]): boolean {
   return tasks.length > 0 && tasks.every(isTaskComplete);
+}
+
+// Verification failures a task may accumulate before it is auto-blocked (initial attempt + retries).
+export const MAX_VERIFY_ATTEMPTS = 3;
+
+// Stale-claim recovery. `active` means a task was claimed and spawned in some session; across a
+// restart nothing is truly in flight, so any leftover `active` is a claim that never completed —
+// reset it to `pending` so it re-enters the frontier. Mutates in place; returns true if anything
+// changed. Run this once per session before the first claim (when no claim could be genuinely live).
+export function reactivateStaleActive(tasks: TaskRecord[], stamp: string): boolean {
+  let changed = false;
+  for (const task of tasks) {
+    if (task.status === "active") {
+      task.status = "pending";
+      task.updated_at = stamp;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// Claims a ready batch by flipping the named pending tasks to `active`, so a re-query of the
+// frontier can't hand the same tasks out again — the double-spawn guard for parallel waves
+// (selectFrontier only returns `pending`). Mutates in place.
+export function claimTasks(tasks: TaskRecord[], ids: string[], stamp: string): void {
+  const claim = new Set(ids);
+  for (const task of tasks) {
+    if (claim.has(task.id) && task.status === "pending") {
+      task.status = "active";
+      task.updated_at = stamp;
+    }
+  }
+}
+
+// Decides a failed task's next status: requeue (`pending`) for another attempt, or `blocked` once
+// it has burned the retry budget. Increments `attempts`. Mutates in place; returns the new status.
+export function applyVerificationFailure(task: TaskRecord, stamp: string): "pending" | "blocked" {
+  task.attempts = (task.attempts ?? 0) + 1;
+  task.status = task.attempts >= MAX_VERIFY_ATTEMPTS ? "blocked" : "pending";
+  task.updated_at = stamp;
+  return task.status;
 }

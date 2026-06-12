@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { tmpdir } from "node:os";
-import { OPTIONAL_MCP_SERVERS, defaultModelChainForAgent, effortModelSlot, enabledMcpServers, modelSlots, resetPresetCache } from "../src/config/models.js";
+import { OPTIONAL_MCP_SERVERS, agentVariantOverride, defaultModelChainForAgent, defaultModelForAgent, enabledMcpServers, modelSlots, presetAgentModels, resetPresetCache } from "../src/config/models.js";
 
 // Point the config-dir resolver at an empty temp dir so file-based preset resolution can't
 // read this machine's real ~/.config/opencode/open-xmen.json.
@@ -122,20 +123,75 @@ describe("model preset resolution", () => {
     });
   });
 
-  test("effortModelSlot remaps the dispatch tier, preserving the route slot when unset", () => {
-    expect(effortModelSlot(undefined, "workers")).toBe("workers");
-    expect(effortModelSlot("low", "workers")).toBe("fast");
-    expect(effortModelSlot("high", "workers")).toBe("planner");
-    // effort resolves to a real model under a preset
-    withPreset("anthropic", "balance", () => {
-      expect(modelSlots()[effortModelSlot("low", "workers")]).toBe("anthropic/claude-haiku-4-5");
-      expect(modelSlots()[effortModelSlot("high", "workers")]).toBe("anthropic/claude-opus-4-8");
-    });
-  });
-
   test("the registry defines launch commands for playwright and semble", () => {
     expect(OPTIONAL_MCP_SERVERS.playwright.command[0]).toBe("npx");
     expect(OPTIONAL_MCP_SERVERS.semble.command).toEqual(["uvx", "--from", "semble[mcp]", "semble"]);
+  });
+
+  test("open-xmen.json `agents` overrides the preset per agent, but env still wins", () => {
+    writeFileSync(
+      path.join(isolatedConfigDir, "open-xmen.json"),
+      JSON.stringify({
+        providers: ["anthropic"],
+        focus: "performance",
+        agents: { wolverine: "openai/my-coder", storm: "" },
+      }),
+    );
+    resetPresetCache();
+    try {
+      // A non-empty per-agent override wins over the anthropic/performance preset for that agent.
+      expect(defaultModelForAgent("wolverine")).toBe("openai/my-coder");
+      // An empty-string entry is ignored and falls through to the preset.
+      expect(defaultModelForAgent("storm")).toBe("anthropic/claude-opus-4-8");
+      // An agent with no override still resolves from the preset.
+      expect(defaultModelForAgent("cyclops")).toBe("anthropic/claude-opus-4-8");
+      // The override does not leak into slot resolution — other workers-slot agents are unaffected.
+      expect(modelSlots().workers).toBe("anthropic/claude-opus-4-8");
+      // CEREBRO_MODEL_<SLOT> env outranks the per-agent file override (wolverine is a workers-slot agent).
+      const prev = process.env.CEREBRO_MODEL_WORKERS;
+      process.env.CEREBRO_MODEL_WORKERS = "openai/env-coder";
+      resetPresetCache();
+      expect(defaultModelForAgent("wolverine")).toBe("openai/env-coder");
+      if (prev === undefined) delete process.env.CEREBRO_MODEL_WORKERS;
+      else process.env.CEREBRO_MODEL_WORKERS = prev;
+    } finally {
+      rmSync(path.join(isolatedConfigDir, "open-xmen.json"), { force: true });
+      resetPresetCache();
+    }
+  });
+
+  test("a per-agent object entry supplies variant and explicit fallback_models", () => {
+    writeFileSync(
+      path.join(isolatedConfigDir, "open-xmen.json"),
+      JSON.stringify({
+        providers: ["anthropic"],
+        focus: "performance",
+        agents: { storm: { model: "openai/gpt-5.5", variant: "high", fallback_models: ["anthropic/claude-sonnet-4-6"] } },
+      }),
+    );
+    resetPresetCache();
+    try {
+      expect(defaultModelForAgent("storm")).toBe("openai/gpt-5.5");
+      expect(defaultModelChainForAgent("storm")).toEqual(["openai/gpt-5.5", "anthropic/claude-sonnet-4-6"]);
+      expect(agentVariantOverride("storm")).toBe("high");
+      // An unknown agent name in the table is ignored.
+      expect(agentVariantOverride("not-an-agent")).toBeUndefined();
+    } finally {
+      rmSync(path.join(isolatedConfigDir, "open-xmen.json"), { force: true });
+      resetPresetCache();
+    }
+  });
+
+  test("presetAgentModels resolves a per-agent table purely from a selection", () => {
+    expect(presetAgentModels(null).cerebro).toBe("openai/gpt-5.5"); // OpenAI/balance defaults
+    const table = presetAgentModels({ providers: ["anthropic"], focus: "performance" });
+    expect(table.cyclops).toBe("anthropic/claude-opus-4-8");
+    expect(table.wolverine).toBe("anthropic/claude-opus-4-8");
+    expect(table.nightcrawler).toBe("anthropic/claude-sonnet-4-6");
+    // Every agent is represented individually (13 X-Men), not collapsed onto slots.
+    expect(Object.keys(table).sort()).toEqual(
+      ["beast", "cerebro", "cyclops", "cypher", "emma-frost", "forge", "jean-grey", "legion", "nightcrawler", "professor-x", "sage", "storm", "wolverine"],
+    );
   });
 
   test("CEREBRO_MODEL_* env overrides the preset for a slot", () => {

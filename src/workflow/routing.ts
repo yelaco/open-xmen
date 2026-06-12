@@ -1,5 +1,4 @@
 import { AGENT_MODEL_SLOTS } from "../config/models.js";
-import type { CerebroModelSlot } from "../config/models.js";
 import { TASK_RESULT_CONTRACT } from "../agents/team.js";
 import type { TaskRecord } from "./types.js";
 
@@ -10,27 +9,26 @@ const FAILURE_OUTPUT_CAP = 4000;
 export type ChainStage = {
   name: "design" | "structure" | "visual";
   agent: string;
-  modelSlot: CerebroModelSlot;
   terminalMarker: string;
 };
 
 export type Route =
-  | { kind: "single"; agent: string; modelSlot: CerebroModelSlot }
+  | { kind: "single"; agent: string }
   | { kind: "chain"; stages: ChainStage[] };
 
 export const VISUAL_ENGINEERING_STAGES: ChainStage[] = [
-  { name: "design", agent: "jean-grey", modelSlot: "design", terminalMarker: "DESIGN_SPEC_READY" },
-  { name: "structure", agent: "wolverine", modelSlot: "workers", terminalMarker: "TASK_RESULT:" },
-  { name: "visual", agent: "storm", modelSlot: "workers", terminalMarker: "TASK_RESULT:" },
+  { name: "design", agent: "jean-grey", terminalMarker: "DESIGN_SPEC_READY" },
+  { name: "structure", agent: "wolverine", terminalMarker: "TASK_RESULT:" },
+  { name: "visual", agent: "storm", terminalMarker: "TASK_RESULT:" },
 ];
 
 export const CATEGORY_ROUTES: Record<string, Route> = {
   "visual-engineering": { kind: "chain", stages: VISUAL_ENGINEERING_STAGES },
-  architecture: { kind: "single", agent: "forge", modelSlot: AGENT_MODEL_SLOTS.forge },
-  explore: { kind: "single", agent: "nightcrawler", modelSlot: AGENT_MODEL_SLOTS.nightcrawler },
-  research: { kind: "single", agent: "sage", modelSlot: AGENT_MODEL_SLOTS.sage },
-  deep: { kind: "single", agent: "wolverine", modelSlot: AGENT_MODEL_SLOTS.wolverine },
-  quick: { kind: "single", agent: "wolverine", modelSlot: AGENT_MODEL_SLOTS.wolverine },
+  architecture: { kind: "single", agent: "forge" },
+  explore: { kind: "single", agent: "nightcrawler" },
+  research: { kind: "single", agent: "sage" },
+  deep: { kind: "single", agent: "wolverine" },
+  quick: { kind: "single", agent: "wolverine" },
 };
 
 // Agents the engine may dispatch directly when a task names one as owner.
@@ -46,9 +44,9 @@ export function resolveRoute(task: TaskRecord): Route {
   if (category && CATEGORY_ROUTES[category]) return CATEGORY_ROUTES[category];
   const owner = normalizeOwner(task.owner);
   if (owner in AGENT_MODEL_SLOTS && !NON_DISPATCHABLE_OWNERS.has(owner)) {
-    return { kind: "single", agent: owner, modelSlot: AGENT_MODEL_SLOTS[owner as keyof typeof AGENT_MODEL_SLOTS] };
+    return { kind: "single", agent: owner };
   }
-  return { kind: "single", agent: "wolverine", modelSlot: AGENT_MODEL_SLOTS.wolverine };
+  return { kind: "single", agent: "wolverine" };
 }
 
 function tail(text: string, cap: number): string {

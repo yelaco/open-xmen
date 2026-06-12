@@ -76,6 +76,15 @@ describe("writeOpenXmenConfig", () => {
     expect(read(dir)).toEqual({ providers: ["openai"], focus: "balance", mcp_servers: ["semble"] });
   });
 
+  test("writes and merges the editable per-agent table", () => {
+    dir = mkdtempSync(path.join(tmpdir(), "opx-cfg-"));
+    writeOpenXmenConfig(dir, { providers: ["anthropic"], focus: "performance", agents: { wolverine: "anthropic/claude-opus-4-8" } }, { dryRun: false, planned });
+    expect(read(dir).agents).toEqual({ wolverine: "anthropic/claude-opus-4-8" });
+    // A later run that only sets mcp_servers must preserve the agents table.
+    writeOpenXmenConfig(dir, { mcp_servers: ["semble"] }, { dryRun: false, planned });
+    expect(read(dir).agents).toEqual({ wolverine: "anthropic/claude-opus-4-8" });
+  });
+
   test("dry run plans without writing", () => {
     dir = mkdtempSync(path.join(tmpdir(), "opx-cfg-"));
     writeOpenXmenConfig(dir, { providers: ["openai"], focus: "cost" }, { dryRun: true, planned });

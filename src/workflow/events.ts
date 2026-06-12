@@ -16,7 +16,6 @@ export type ProgressEvent = {
   status?: ProgressStatus;
   task_id?: string;
   agent?: string;
-  child_session_id?: string;
   detail?: string;
 };
 
@@ -51,7 +50,6 @@ export function createEventRecorder(ctx: RuntimeContext): EventRecorder {
       status: record.status,
       task_id: record.task_id,
       agent: record.agent,
-      child_session_id: record.child_session_id,
     });
     return record;
   }

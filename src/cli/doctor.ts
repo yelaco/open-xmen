@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { CEREBRO_AGENTS, CEREBRO_COMMANDS } from "../runtime/index.js";
 import { opencodeConfigHasOpenXmenPlugin } from "./config.js";
+import { tryParseJsonc } from "./jsonc.js";
 
 export type DoctorResult = {
   ok: boolean;
@@ -28,7 +29,7 @@ export function runOpenCodeDoctor(cwd: string): DoctorResult {
     errors.push("could not read resolved OpenCode config with `opencode debug config`");
   }
   if (exists("opencode.jsonc")) {
-    const opencodeConfig = parseJsonc(read("opencode.jsonc"));
+    const opencodeConfig = tryParseJsonc(read("opencode.jsonc"));
     if (!isRecord(opencodeConfig)) {
       errors.push("opencode.jsonc should contain a JSON object");
     } else if (localHasPlugin && opencodeConfig.default_agent !== "cerebro") {
@@ -63,12 +64,10 @@ export function runOpenCodeDoctor(cwd: string): DoctorResult {
   const opencode = spawnSync("opencode", ["--version"], { encoding: "utf8" });
   if (opencode.status !== 0) errors.push("opencode executable not found or not working");
 
-  const resolvedAgentCount = resolvedConfig && isRecord(resolvedConfig.agent)
-    ? REQUIRED_AGENTS.filter((name) => isRecord(resolvedConfig.agent?.[name])).length
-    : 0;
-  const resolvedCommandCount = resolvedConfig && isRecord(resolvedConfig.command)
-    ? REQUIRED_COMMANDS.filter((name) => isRecord(resolvedConfig.command?.[name])).length
-    : 0;
+  const agentMap = resolvedConfig && isRecord(resolvedConfig.agent) ? resolvedConfig.agent : undefined;
+  const commandMap = resolvedConfig && isRecord(resolvedConfig.command) ? resolvedConfig.command : undefined;
+  const resolvedAgentCount = agentMap ? REQUIRED_AGENTS.filter((name) => isRecord(agentMap[name])).length : 0;
+  const resolvedCommandCount = commandMap ? REQUIRED_COMMANDS.filter((name) => isRecord(commandMap[name])).length : 0;
 
   return { ok: errors.length === 0, cwd, errors, agents: resolvedAgentCount, commands: resolvedCommandCount, mode: "plugin" };
 }
@@ -87,7 +86,8 @@ function resolvedOpenCodeConfig(cwd: string) {
     if (opencode.status !== 0) return undefined;
     const text = readFileSync(tmpFile, "utf8");
     if (!text.trim()) return undefined;
-    return parseJsonc(text);
+    const parsed = tryParseJsonc(text);
+    return isRecord(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   } finally {
@@ -105,77 +105,6 @@ function isOpenXmenPackageRoot(cwd: string) {
   } catch {
     return false;
   }
-}
-
-function parseJsonc(text: string) {
-  try {
-    return JSON.parse(removeTrailingCommas(stripJsonComments(text)));
-  } catch {
-    return undefined;
-  }
-}
-
-function stripJsonComments(text: string) {
-  let out = "";
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-    if (inString) {
-      out += ch;
-      if (escape) escape = false;
-      else if (ch === "\\") escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      out += ch;
-      continue;
-    }
-    if (ch === "/" && next === "/") {
-      while (i < text.length && text[i] !== "\n") i++;
-      out += "\n";
-      continue;
-    }
-    if (ch === "/" && next === "*") {
-      i += 2;
-      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
-      i++;
-      continue;
-    }
-    out += ch;
-  }
-  return out;
-}
-
-function removeTrailingCommas(text: string) {
-  let out = "";
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) {
-      out += ch;
-      if (escape) escape = false;
-      else if (ch === "\\") escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      out += ch;
-      continue;
-    }
-    if (ch === ",") {
-      let j = i + 1;
-      while (/\s/.test(text[j] || "")) j++;
-      if (text[j] === "}" || text[j] === "]") continue;
-    }
-    out += ch;
-  }
-  return out;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

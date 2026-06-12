@@ -8,14 +8,24 @@ afterEach(() => resetPresetCache());
 describe("routeReadyBatch", () => {
   test("returns the dependency frontier with routing resolved", () => {
     const next = routeReadyBatch([
-      makeTask({ id: "a", category: "quick" }),
-      makeTask({ id: "b", category: "architecture" }),
+      makeTask({ id: "a", category: "quick", files: ["src/a.ts"] }),
+      makeTask({ id: "b", category: "architecture", files: ["src/b.ts"] }),
     ]);
     expect(next.ready.map((t) => t.task_id).sort()).toEqual(["a", "b"]);
     const a = next.ready.find((t) => t.task_id === "a")!;
     const b = next.ready.find((t) => t.task_id === "b")!;
-    expect(a).toMatchObject({ agent: "wolverine", model_slot: "workers" });
-    expect(b).toMatchObject({ agent: "forge", model_slot: "planner" });
+    expect(a).toMatchObject({ agent: "wolverine" });
+    expect(b).toMatchObject({ agent: "forge" });
+    expect(next.remaining).toBe(2);
+    expect(next.blocked).toBe(false);
+  });
+
+  test("schedules an undeclared-files task alone, not in a parallel wave", () => {
+    const next = routeReadyBatch([
+      makeTask({ id: "a" }), // no files → unknown footprint
+      makeTask({ id: "b" }),
+    ]);
+    expect(next.ready.map((t) => t.task_id)).toEqual(["a"]);
     expect(next.remaining).toBe(2);
     expect(next.blocked).toBe(false);
   });
@@ -36,13 +46,6 @@ describe("routeReadyBatch", () => {
       makeTask({ id: "c", files: ["src/y.ts"] }),
     ]);
     expect(next.ready.map((t) => t.task_id)).toEqual(["a", "c"]);
-  });
-
-  test("effort overrides the dispatch model tier without changing the agent", () => {
-    const low = routeReadyBatch([makeTask({ id: "a", category: "deep", effort: "low" })]).ready[0];
-    const high = routeReadyBatch([makeTask({ id: "b", category: "deep", effort: "high" })]).ready[0];
-    expect(low).toMatchObject({ agent: "wolverine", model_slot: "fast" });
-    expect(high).toMatchObject({ agent: "wolverine", model_slot: "planner" });
   });
 
   test("visual-engineering returns the sequential agent chain", () => {

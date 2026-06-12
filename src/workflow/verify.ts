@@ -1,5 +1,25 @@
 import { spawn } from "node:child_process";
 
+// High-precision patterns for plainly destructive / remote-code-exec shell. Verification commands
+// are authored by the model, and cerebro_verify runs them directly (it bypasses OpenCode's
+// `permission.bash: ask` gate), so this is the guard against an injected `curl … | sh` or `rm -rf /`.
+// Patterns are deliberately narrow to avoid flagging legitimate test commands (e.g. `rm -rf .cache`).
+const DANGEROUS_COMMAND_PATTERNS: RegExp[] = [
+  /\brm\s+-[a-z]*[rf][a-z]*\s+(-[a-z]+\s+)*(\/|~|\$HOME)(\s|$|\/|\*)/i, // rm -rf of / or ~ or $HOME
+  /\b(curl|wget|fetch)\b[^|]*\|\s*(sudo\s+)?(sh|bash|zsh|dash|python3?|node|ruby|perl)\b/i, // pipe download to interpreter
+  /:\(\)\s*\{\s*:\s*\|\s*:&\s*\}\s*;\s*:/, // fork bomb
+  /\bdd\b[^\n]*\bof=\/dev\//i, // dd to a device
+  /\bmkfs(\.\w+)?\b/i, // format a filesystem
+  /\bch(mod|own)\s+-R\s+\S+\s+\/(\s|$)/i, // recursive chmod/chown on /
+  />\s*\/dev\/(sd|nvme|disk|hd)/i, // redirect over a block device
+];
+
+// Returns the first verification command that matches a destructive pattern, or undefined when all
+// commands look safe to run.
+export function findDangerousCommand(commands: string[]): string | undefined {
+  return commands.find((command) => DANGEROUS_COMMAND_PATTERNS.some((pattern) => pattern.test(command)));
+}
+
 const OUTPUT_CAP_BYTES = 64 * 1024;
 const FAILURE_TAIL_CAP = 4000;
 export const DEFAULT_COMMAND_TIMEOUT_MS = 600_000;

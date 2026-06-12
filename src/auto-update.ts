@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installOpenXmenPackageWorkspace } from "./cli/config.js";
+import { tryParseJsonc } from "./cli/jsonc.js";
 
 const PACKAGE_NAME = "open-xmen";
 const NPM_DIST_TAGS_URL = `https://registry.npmjs.org/-/package/${PACKAGE_NAME}/dist-tags`;
@@ -130,7 +131,7 @@ function readJson(file: string): JsonValue | undefined {
 function readJsonc(file: string): JsonValue | undefined {
   if (!existsSync(file)) return undefined;
   try {
-    return JSON.parse(removeTrailingCommas(stripJsonComments(readFileSync(file, "utf8")))) as JsonValue;
+    return tryParseJsonc(readFileSync(file, "utf8")) as JsonValue | undefined;
   } catch {
     return undefined;
   }
@@ -158,14 +159,50 @@ function isLocalPackageRootEntry(entry: string) {
   return isRecord(packageJson) && packageJson.name === PACKAGE_NAME;
 }
 
-function compareSemver(a: string, b: string) {
-  const left = a.split(/[+-]/)[0].split(".").map((part) => Number.parseInt(part, 10));
-  const right = b.split(/[+-]/)[0].split(".").map((part) => Number.parseInt(part, 10));
-  for (let i = 0; i < 3; i++) {
-    const diff = (left[i] || 0) - (right[i] || 0);
-    if (diff !== 0) return diff;
+function parseSemver(version: string): { core: number[]; pre?: string } {
+  const [coreAndPre] = version.split("+"); // drop build metadata (ignored in precedence)
+  const [core, ...preParts] = coreAndPre.split("-");
+  const nums = core.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  return { core: nums, pre: preParts.length ? preParts.join("-") : undefined };
+}
+
+// Compares prerelease identifier lists per semver §11: numeric identifiers compare numerically and
+// rank below alphanumeric ones; a shorter set ranks lower when all preceding identifiers are equal.
+function comparePrerelease(a: string, b: string): number {
+  const as = a.split(".");
+  const bs = b.split(".");
+  for (let i = 0; i < Math.max(as.length, bs.length); i++) {
+    const x = as[i];
+    const y = bs[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const xn = /^\d+$/.test(x);
+    const yn = /^\d+$/.test(y);
+    if (xn && yn) {
+      const diff = Number(x) - Number(y);
+      if (diff !== 0) return Math.sign(diff);
+    } else if (xn !== yn) {
+      return xn ? -1 : 1; // numeric identifiers have lower precedence than alphanumeric
+    } else {
+      const cmp = x.localeCompare(y);
+      if (cmp !== 0) return Math.sign(cmp);
+    }
   }
-  return a.localeCompare(b);
+  return 0;
+}
+
+export function compareSemver(a: string, b: string): number {
+  const left = parseSemver(a);
+  const right = parseSemver(b);
+  for (let i = 0; i < 3; i++) {
+    const diff = (left.core[i] || 0) - (right.core[i] || 0);
+    if (diff !== 0) return Math.sign(diff);
+  }
+  // Equal core: a version WITHOUT a prerelease outranks one WITH (1.0.0 > 1.0.0-rc1).
+  if (!left.pre && !right.pre) return 0;
+  if (!left.pre) return 1;
+  if (!right.pre) return -1;
+  return comparePrerelease(left.pre, right.pre);
 }
 
 async function showToast(ctx: PluginInput, title: string, message: string, variant: "info" | "success" | "warning" | "error") {
@@ -183,69 +220,6 @@ function parentSessionId(properties: unknown) {
   const info = properties.info;
   if (!isRecord(info)) return undefined;
   return typeof info.parentID === "string" && info.parentID ? info.parentID : undefined;
-}
-
-function stripJsonComments(text: string) {
-  let out = "";
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-    if (inString) {
-      out += ch;
-      if (escape) escape = false;
-      else if (ch === "\\") escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      out += ch;
-      continue;
-    }
-    if (ch === "/" && next === "/") {
-      while (i < text.length && text[i] !== "\n") i++;
-      out += "\n";
-      continue;
-    }
-    if (ch === "/" && next === "*") {
-      i += 2;
-      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
-      i++;
-      continue;
-    }
-    out += ch;
-  }
-  return out;
-}
-
-function removeTrailingCommas(text: string) {
-  let out = "";
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) {
-      out += ch;
-      if (escape) escape = false;
-      else if (ch === "\\") escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      out += ch;
-      continue;
-    }
-    if (ch === ",") {
-      let j = i + 1;
-      while (/\s/.test(text[j] || "")) j++;
-      if (text[j] === "}" || text[j] === "]") continue;
-    }
-    out += ch;
-  }
-  return out;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import readline from "node:readline";
 import { createInterface } from "node:readline/promises";
 import path from "node:path";
-import { CEREBRO_FOCUSES, CEREBRO_PROVIDERS, OPTIONAL_MCP_SERVERS, modelSlots } from "./config/models.js";
+import { CEREBRO_FOCUSES, CEREBRO_PROVIDERS, OPTIONAL_MCP_SERVERS, agentModels, configAgentOverrides, loadPresetSelection, modelSlots, presetAgentModels } from "./config/models.js";
 import type { CerebroFocus, CerebroProvider } from "./config/models.js";
 import { installSkills } from "./cli/runtime.js";
 import { parseMcpArg, parseProviderArg } from "./cli/args.js";
@@ -60,6 +60,13 @@ Install options:
 On an interactive terminal, install asks for your provider and focus when
 --provider/--focus are not given. Non-interactively it leaves the model
 preset unchanged (defaults to OpenAI / balance).
+
+Install also writes a per-agent model mapping to the "agents" key of
+~/.config/opencode/open-xmen.json. Edit any agent there to override the
+preset for that agent; each value is a model id string, or an object
+{ "model": "...", "variant": "...", "fallback_models": ["..."] }. A
+CEREBRO_MODEL_<SLOT> env var still wins. Run "open-xmen models" to print
+the effective per-agent mapping.
 
 Skills (e.g. opx-frontend-design) always install into the global OpenCode
 config dir (~/.config/opencode/skills/), regardless of --dir.
@@ -172,9 +179,18 @@ async function install(args: string[]) {
   // Skills are user-global so OpenCode can discover them regardless of where the plugin entry lives.
   const skillCount = installSkills(globalConfigDir, { dryRun: options.dryRun, planned });
 
-  const patch: { providers?: CerebroProvider[]; focus?: CerebroFocus; mcp_servers?: string[] } = {};
+  const patch: { providers?: CerebroProvider[]; focus?: CerebroFocus; mcp_servers?: string[]; agents?: Record<string, string> } = {};
   if (selection) { patch.providers = selection.providers; patch.focus = selection.focus; }
   if (resolvedMcp !== undefined) patch.mcp_servers = resolvedMcp;
+  // Seed the editable per-agent model table in open-xmen.json. We only touch the file when the
+  // install is already persisting a choice (provider/focus selection or MCP servers), so a bare
+  // non-interactive install stays side-effect-free. A reconfigure refreshes the table to the new
+  // preset; otherwise we seed it only when no table exists yet, preserving any per-agent models the
+  // user has hand-edited across plain re-installs.
+  const willWriteConfig = selection !== undefined || resolvedMcp !== undefined;
+  if (willWriteConfig && (selection || Object.keys(configAgentOverrides()).length === 0)) {
+    patch.agents = presetAgentModels(selection ?? loadPresetSelection());
+  }
   if (Object.keys(patch).length > 0) writeOpenXmenConfig(globalConfigDir, patch, { dryRun: options.dryRun, planned });
 
   if (!options.dryRun && !options.skipDeps) warmOpenCodePluginCache(packageRoot());
@@ -193,6 +209,7 @@ async function install(args: string[]) {
   console.log("Commands and agents are provided by the plugin; no .opencode/ or .cerebro/ files were written.");
   console.log(`Installed ${skillCount} skill(s) into ${path.join(globalConfigDir, "skills")}.`);
   if (selection) console.log(`Model preset: ${selection.providers.join(" + ")} / ${selection.focus} (best model per agent across your subscription).`);
+  if (patch.agents) console.log(`Per-agent model mapping written to ${path.join(globalConfigDir, "open-xmen.json")} ("agents") — edit any agent to override the preset.`);
   if (resolvedMcp !== undefined) console.log(`MCP servers: ${resolvedMcp.length ? resolvedMcp.join(", ") : "none"}.`);
   console.log("Next: restart OpenCode, then use `/cerebro-plan`, `/cerebro-start-work`, or `/cerebro-ultrawork`.");
   return 0;
@@ -440,7 +457,9 @@ function doctor(args: string[] = []) {
 }
 
 function models() {
-  console.log(JSON.stringify(modelSlots(), null, 2));
+  // `slots` are the role/category defaults; `agents` is what each agent actually resolves to
+  // (per-agent open-xmen.json override → preset → default).
+  console.log(JSON.stringify({ slots: modelSlots(), agents: agentModels() }, null, 2));
   return 0;
 }
 

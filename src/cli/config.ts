@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { parseJsonc } from "./jsonc.js";
 
 const PACKAGE_NAME = "open-xmen";
 const PACKAGE_CACHE_TAG = "latest";
@@ -26,7 +27,7 @@ export function globalOpenCodeConfigDir() {
 // clobber each other's keys.
 export function writeOpenXmenConfig(
   globalConfigDir: string,
-  patch: { providers?: string[]; focus?: string; mcp_servers?: string[] },
+  patch: { providers?: string[]; focus?: string; mcp_servers?: string[]; agents?: Record<string, JsonValue> },
   opts: { dryRun: boolean; planned: string[] },
 ) {
   const destination = path.join(globalConfigDir, "open-xmen.json");
@@ -43,7 +44,8 @@ export function writeOpenXmenConfig(
   if (patch.providers !== undefined) next.providers = patch.providers;
   if (patch.focus !== undefined) next.focus = patch.focus;
   if (patch.mcp_servers !== undefined) next.mcp_servers = patch.mcp_servers;
-  const summary = Object.entries(patch).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${Array.isArray(v) ? v.join("+") : v}`).join(", ");
+  if (patch.agents !== undefined) next.agents = patch.agents;
+  const summary = Object.entries(patch).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${formatPatchValue(v)}`).join(", ");
 
   if (opts.dryRun) {
     opts.planned.push(`${existsSync(destination) ? "update" : "write"} ${destination} (${summary})`);
@@ -53,12 +55,18 @@ export function writeOpenXmenConfig(
   writeFileSync(destination, `${JSON.stringify(next, null, 2)}\n`, "utf8");
 }
 
+function formatPatchValue(value: JsonValue | undefined): string {
+  if (Array.isArray(value)) return value.join("+");
+  if (isRecord(value)) return `${Object.keys(value).length} agent(s)`;
+  return String(value);
+}
+
 export function updateOpencodeConfig(target: string, opts: UpdateOpenCodeConfigOptions) {
   const destination = path.join(target, "opencode.jsonc");
   let parsed: JsonValue = {};
   if (existsSync(destination)) {
     try {
-      parsed = parseJsonc(readFileSync(destination, "utf8"));
+      parsed = parseJsonc(readFileSync(destination, "utf8")) as JsonValue;
     } catch (err) {
       throw new Error(`Could not parse ${destination}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -121,7 +129,7 @@ export function opencodeConfigHasOpenXmenPlugin(cwd = process.cwd()) {
   if (!existsSync(configPath)) return false;
   try {
     const config = parseJsonc(readFileSync(configPath, "utf8"));
-    return asArray(config.plugin).some((entry) => {
+    return asArray(isRecord(config) ? config.plugin : undefined).some((entry) => {
       const spec = Array.isArray(entry) ? entry[0] : entry;
       return typeof spec === "string" && isOpenXmenPluginEntry(spec);
     });
@@ -215,74 +223,6 @@ function readJsonFile(file: string): JsonValue | undefined {
 
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseJsonc(text: string) {
-  const stripped = removeTrailingCommas(stripJsonComments(text));
-  return stripped.trim() ? JSON.parse(stripped) : {};
-}
-
-function stripJsonComments(text: string) {
-  let out = "";
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-    if (inString) {
-      out += ch;
-      if (escape) escape = false;
-      else if (ch === "\\") escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      out += ch;
-      continue;
-    }
-    if (ch === "/" && next === "/") {
-      while (i < text.length && text[i] !== "\n") i++;
-      out += "\n";
-      continue;
-    }
-    if (ch === "/" && next === "*") {
-      i += 2;
-      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
-      i++;
-      continue;
-    }
-    out += ch;
-  }
-  return out;
-}
-
-function removeTrailingCommas(text: string) {
-  let out = "";
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) {
-      out += ch;
-      if (escape) escape = false;
-      else if (ch === "\\") escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      out += ch;
-      continue;
-    }
-    if (ch === ",") {
-      let j = i + 1;
-      while (/\s/.test(text[j] || "")) j++;
-      if (text[j] === "}" || text[j] === "]") continue;
-    }
-    out += ch;
-  }
-  return out;
 }
 
 function asArray(value: unknown): JsonValue[] {

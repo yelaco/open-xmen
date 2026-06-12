@@ -1,5 +1,5 @@
-import { type AgentDefinition, type OpenCodeMeta, resolvePrompt, CEREBRO_RUNTIME_CONTRACT } from "./types.js";
-import { AGENT_MODEL_SLOTS, defaultModelChainForAgent } from "../config/models.js";
+import { type AgentDefinition, type OpenCodeMeta, type OpenCodeThinkingVariant, resolvePrompt, CEREBRO_RUNTIME_CONTRACT } from "./types.js";
+import { AGENT_MODEL_SLOTS, agentVariantOverride, defaultModelChainForAgent } from "../config/models.js";
 
 export const TASK_RESULT_CONTRACT = `## Output Contract
 
@@ -32,6 +32,12 @@ function modelChain(agent: keyof typeof AGENT_MODEL_SLOTS) {
   return defaultModelChainForAgent(agent);
 }
 
+const THINKING_VARIANTS: readonly OpenCodeThinkingVariant[] = ["none", "low", "medium", "high", "xhigh"];
+
+function validThinkingVariant(value: string | undefined): OpenCodeThinkingVariant | undefined {
+  return value !== undefined && (THINKING_VARIANTS as readonly string[]).includes(value) ? (value as OpenCodeThinkingVariant) : undefined;
+}
+
 export function makeAgent(
   name: string,
   displayName: string,
@@ -44,12 +50,15 @@ export function makeAgent(
   customAppendPrompt?: string,
 ): AgentDefinition {
   const prompt = resolvePrompt(basePrompt, customPrompt, customAppendPrompt);
+  // A per-agent `variant` in open-xmen.json overrides the agent's built-in variant (when it names a
+  // valid thinking level; anything else is ignored).
+  const variantOverride = validThinkingVariant(agentVariantOverride(name));
   const definition: AgentDefinition = {
     name,
     displayName,
     description,
     config: { temperature: 0.2, prompt },
-    opencode,
+    opencode: variantOverride ? { ...opencode, variant: variantOverride } : opencode,
   };
   if (Array.isArray(model)) {
     definition._modelArray = model.map((m) => (typeof m === "string" ? { id: m } : m));
