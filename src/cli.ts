@@ -5,9 +5,9 @@ import { createInterface } from "node:readline/promises";
 import path from "node:path";
 import { CEREBRO_FOCUSES, CEREBRO_PROVIDERS, OPTIONAL_MCP_SERVERS, agentModels, configAgentOverrides, loadPresetSelection, modelSlots, presetAgentModels } from "./config/models.js";
 import type { CerebroFocus, CerebroProvider } from "./config/models.js";
-import { installSkills } from "./cli/runtime.js";
+import { installSkills, uninstallSkills } from "./cli/runtime.js";
 import { parseMcpArg, parseProviderArg } from "./cli/args.js";
-import { globalOpenCodeConfigDir, updateOpencodeConfig, warmOpenCodePluginCache, writeOpenXmenConfig } from "./cli/config.js";
+import { globalOpenCodeConfigDir, removeOpenXmenConfig, removeOpencodeConfig, updateOpencodeConfig, warmOpenCodePluginCache, writeOpenXmenConfig } from "./cli/config.js";
 import { runOpenCodeDoctor } from "./cli/doctor.js";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +27,7 @@ async function main() {
 
   if (!command) return install([]);
   if (command === "install") return install(args.slice(1));
+  if (command === "uninstall") return uninstall(args.slice(1));
   if (command === "doctor") return doctor(args.slice(1));
   if (command === "models") return models();
   if (command === "--help" || command === "-h") {
@@ -44,6 +45,7 @@ function printHelp() {
 
 Usage:
   open-xmen [install] [OPTIONS]
+  open-xmen uninstall [OPTIONS]
   open-xmen doctor [OPTIONS]
   open-xmen models
 
@@ -72,6 +74,13 @@ Skills (e.g. opx-frontend-design) always install into the global OpenCode
 config dir (~/.config/opencode/skills/), regardless of --dir.
 
 
+Uninstall options:
+  --dir <path>    Project directory whose opencode.jsonc to clean (default: user config)
+  -g, --global    Operate on the OpenCode user config (default)
+  --purge         Also delete ~/.config/opencode/open-xmen.json (and its .bak)
+  --dry-run       Print planned removals without changing files
+  -h, --help      Show this help message
+
 Doctor options:
   --dir <path>    Project directory to validate (default: current directory)
   --json          Print diagnostics as JSON
@@ -81,6 +90,8 @@ Examples:
   bunx open-xmen@latest install
   bunx open-xmen@latest install --global
   bunx open-xmen@latest install --dir /path/to/project --dry-run
+  open-xmen uninstall
+  open-xmen uninstall --purge --dry-run
   open-xmen doctor --json
 `);
 }
@@ -93,6 +104,26 @@ Use --dir to write a project-local opencode.jsonc instead.
 Plugin skills always install into the global OpenCode config dir (~/.config/opencode/skills/) so OpenCode can discover them, regardless of --dir.
 --global is accepted as an explicit alias for the default user-config install.
 opencode.jsonc is updated atomically and an opencode.jsonc.bak backup is created when replacing an existing config.`);
+}
+
+function printUninstallHelp() {
+  console.log(`Usage: open-xmen uninstall [--dir <path>] [--global] [--dry-run] [--purge]
+
+Reverses install: removes the Open X-Men plugin entry from opencode.jsonc and
+deletes the plugin-owned skills from the global OpenCode config dir
+(~/.config/opencode/skills/). Agents and commands are plugin-provided, so they
+disappear on the next OpenCode reload once the plugin entry is gone.
+
+Options:
+  --dir <path>    Project directory whose opencode.jsonc to clean (default: user config)
+  -g, --global    Operate on the OpenCode user config (default)
+  --purge         Also delete ~/.config/opencode/open-xmen.json (and its .bak)
+  --dry-run       Print planned removals without changing files
+  -h, --help      Show this help message
+
+By default open-xmen.json (your model preset / per-agent table) is preserved so a
+later reinstall keeps your settings; pass --purge to remove it too.
+opencode.jsonc is updated atomically and an opencode.jsonc.bak backup is created.`);
 }
 
 function printDoctorHelp() {
@@ -212,6 +243,68 @@ async function install(args: string[]) {
   if (patch.agents) console.log(`Per-agent model mapping written to ${path.join(globalConfigDir, "open-xmen.json")} ("agents") — edit any agent to override the preset.`);
   if (resolvedMcp !== undefined) console.log(`MCP servers: ${resolvedMcp.length ? resolvedMcp.join(", ") : "none"}.`);
   console.log("Next: restart OpenCode, then use `/cerebro-plan`, `/cerebro-start-work`, or `/cerebro-ultrawork`.");
+  return 0;
+}
+
+async function uninstall(args: string[]) {
+  if (args.includes("--help") || args.includes("-h")) {
+    printUninstallHelp();
+    return 0;
+  }
+
+  const unknown = args.find((arg) => {
+    if (!arg.startsWith("-")) return false;
+    return !["--dir", "--global", "-g", "--dry-run", "--purge"].includes(arg);
+  });
+  if (unknown) {
+    console.error(`Unknown uninstall option: ${unknown}`);
+    return 1;
+  }
+
+  const targetArg = valueAfter(args, "--dir");
+  if (args.includes("--dir") && !targetArg) {
+    console.error("Missing value for --dir");
+    return 1;
+  }
+  const explicitGlobal = args.includes("--global") || args.includes("-g");
+  if (explicitGlobal && args.includes("--dir")) {
+    console.error("Use either --global or --dir, not both");
+    return 1;
+  }
+
+  const userConfigUninstall = !args.includes("--dir");
+  const globalConfigDir = globalOpenCodeConfigDir();
+  const target = userConfigUninstall || explicitGlobal ? globalConfigDir : path.resolve(targetArg || process.cwd());
+  const dryRun = args.includes("--dry-run");
+  const purge = args.includes("--purge");
+  const planned: string[] = [];
+
+  console.log(`Open X-Men ${dryRun ? "dry run (uninstall)" : "uninstall"}`);
+  console.log(`${userConfigUninstall || explicitGlobal ? "OpenCode user config" : "Target"}: ${target}`);
+
+  // Reverse of install: drop the plugin entry from opencode.jsonc, remove the global skill dirs,
+  // and (only with --purge) delete open-xmen.json. Agents/commands are plugin-provided, so they
+  // disappear on the next OpenCode reload once the plugin entry is gone.
+  const pluginRemoved = removeOpencodeConfig(target, { dryRun, planned });
+  const skillsRemoved = uninstallSkills(globalConfigDir, { dryRun, planned });
+  const configRemoved = purge ? removeOpenXmenConfig(globalConfigDir, { dryRun, planned }) : false;
+
+  if (dryRun) {
+    console.log("\nPlanned actions:");
+    if (planned.length === 0) console.log("- (nothing to remove)");
+    for (const action of planned) console.log(`- ${action}`);
+    console.log("\nopen-xmen uninstall: DRY RUN PASS");
+    return 0;
+  }
+
+  const opencodeConfig = path.join(target, "opencode.jsonc");
+  const openXmenConfig = path.join(globalConfigDir, "open-xmen.json");
+  console.log("open-xmen uninstall: PASS");
+  console.log(pluginRemoved ? `Removed the Open X-Men plugin entry from ${opencodeConfig}.` : `No Open X-Men plugin entry found in ${opencodeConfig}.`);
+  console.log(skillsRemoved > 0 ? `Removed ${skillsRemoved} skill(s) from ${path.join(globalConfigDir, "skills")}.` : "No Open X-Men skills found to remove.");
+  if (purge) console.log(configRemoved ? `Removed ${openXmenConfig} (and any .bak).` : `No ${openXmenConfig} found to remove.`);
+  else console.log(`Left ${openXmenConfig} in place (your model preset / per-agent table); pass --purge to remove it too.`);
+  console.log("Commands and agents are plugin-provided and disappear once OpenCode reloads — restart OpenCode to finish.");
   return 0;
 }
 

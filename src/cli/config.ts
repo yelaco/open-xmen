@@ -48,10 +48,13 @@ export function writeOpenXmenConfig(
   const summary = Object.entries(patch).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${formatPatchValue(v)}`).join(", ");
 
   if (opts.dryRun) {
-    opts.planned.push(`${existsSync(destination) ? "update" : "write"} ${destination} (${summary})`);
+    const exists = existsSync(destination);
+    opts.planned.push(`${exists ? "update" : "write"} ${destination} (${summary})${exists ? ` — backing up existing → ${destination}.bak` : ""}`);
     return;
   }
   mkdirSync(path.dirname(destination), { recursive: true });
+  // Back up any existing config to .bak before overwriting, so a hand-edited file is never lost.
+  if (existsSync(destination)) copyFileSync(destination, `${destination}.bak`);
   writeFileSync(destination, `${JSON.stringify(next, null, 2)}\n`, "utf8");
 }
 
@@ -85,6 +88,57 @@ export function updateOpencodeConfig(target: string, opts: UpdateOpenCodeConfigO
     return;
   }
   writeAtomicConfig(destination, content);
+}
+
+export type RemoveOpenCodeConfigOptions = { dryRun: boolean; planned: string[] };
+
+// Reverse of updateOpencodeConfig: strip the Open X-Men plugin entry (and the `default_agent`
+// install set to "cerebro") from opencode.jsonc, leaving every other key intact. Returns true if
+// a change was made. Missing/unparseable-but-empty configs are a no-op.
+export function removeOpencodeConfig(target: string, opts: RemoveOpenCodeConfigOptions): boolean {
+  const destination = path.join(target, "opencode.jsonc");
+  if (!existsSync(destination)) return false;
+  let parsed: JsonValue;
+  try {
+    parsed = parseJsonc(readFileSync(destination, "utf8")) as JsonValue;
+  } catch (err) {
+    throw new Error(`Could not parse ${destination}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (!isRecord(parsed)) return false;
+  const config = parsed;
+  const before = asArray(config.plugin);
+  const after = before.filter((entry) => {
+    const spec = Array.isArray(entry) ? entry[0] : entry;
+    return !(typeof spec === "string" && isOpenXmenPluginEntry(spec));
+  });
+  let changed = after.length !== before.length;
+  if (after.length > 0) config.plugin = after;
+  else if ("plugin" in config) delete config.plugin;
+  // Clear the default_agent install set ("cerebro") so it isn't left dangling after removal.
+  if (config.default_agent === "cerebro") { delete config.default_agent; changed = true; }
+  if (!changed) return false;
+
+  const content = `${JSON.stringify(config, null, 2)}\n`;
+  if (opts.dryRun) {
+    opts.planned.push(`atomically update ${destination} (backup ${destination}.bak)`);
+    return true;
+  }
+  writeAtomicConfig(destination, content);
+  return true;
+}
+
+// Removes the persisted open-xmen.json (and its .bak), used by `uninstall --purge`. Returns true
+// if anything was removed.
+export function removeOpenXmenConfig(globalConfigDir: string, opts: RemoveOpenCodeConfigOptions): boolean {
+  const destination = path.join(globalConfigDir, "open-xmen.json");
+  let removed = false;
+  for (const file of [destination, `${destination}.bak`]) {
+    if (!existsSync(file)) continue;
+    if (opts.dryRun) opts.planned.push(`remove ${file}`);
+    else rmSync(file, { force: true });
+    removed = true;
+  }
+  return removed;
 }
 
 export function warmOpenCodePluginCache(packageRoot: string) {

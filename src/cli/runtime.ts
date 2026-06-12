@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { runtimeAssetsByPrefix } from "../runtime/index.js";
 
@@ -22,4 +22,25 @@ export function installSkills(globalConfigDir: string, opts: SkillInstallOptions
     writeFileSync(destination, asset.content, "utf8");
   }
   return skills.length;
+}
+
+// Reverse of installSkills: remove each plugin-owned skill directory (<configDir>/skills/<name>)
+// that the package installs. Derives the skill dirs from the same runtime assets, so it always
+// tracks the shipped skill set. Returns the number of directories removed.
+export function uninstallSkills(globalConfigDir: string, opts: SkillInstallOptions): number {
+  const skillDirs = new Set<string>();
+  for (const asset of runtimeAssetsByPrefix("skills/")) {
+    // asset.path is "skills/<skill-name>/SKILL.md" — remove the whole "<skill-name>" dir once.
+    const segments = asset.path.split("/");
+    if (segments.length >= 2) skillDirs.add(path.join("skills", segments[1]));
+  }
+  let removed = 0;
+  for (const dir of skillDirs) {
+    const destination = path.join(globalConfigDir, dir);
+    if (!existsSync(destination)) continue;
+    if (opts.dryRun) opts.planned.push(`remove ${destination}`);
+    else rmSync(destination, { recursive: true, force: true });
+    removed += 1;
+  }
+  return removed;
 }
