@@ -57,7 +57,9 @@ export const FOCUS_SLOT_PREFERENCES: Record<CerebroFocus, Record<CerebroModelSlo
     image: [IMAGE_MODEL],
   },
   balance: {
-    orchestrator: ["anthropic/claude-sonnet-4-6", "openai/gpt-5.5", "openai/gpt-5.4"],
+    // Cerebro orchestrates long-horizon multi-agent runs where weak coordination compounds, so it
+    // gets a frontier model even under balance (Opus when Anthropic is owned, GPT-5.5 otherwise).
+    orchestrator: ["anthropic/claude-opus-4-8", "openai/gpt-5.5", "anthropic/claude-sonnet-4-6"],
     auditor: ["anthropic/claude-opus-4-8", "openai/gpt-5.5", "anthropic/claude-sonnet-4-6"],
     planner: ["anthropic/claude-opus-4-8", "openai/gpt-5.5", "anthropic/claude-sonnet-4-6"],
     design: ["anthropic/claude-opus-4-8", "openai/gpt-5.5", "anthropic/claude-sonnet-4-6"],

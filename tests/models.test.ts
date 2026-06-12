@@ -93,7 +93,7 @@ describe("model preset resolution", () => {
       const slots = modelSlots();
       expect(slots.auditor).toBe("anthropic/claude-opus-4-8"); // judgment → Claude Opus
       expect(slots.workers).toBe("openai/gpt-5.5"); // coding → GPT-5.5
-      expect(slots.orchestrator).toBe("anthropic/claude-sonnet-4-6"); // high-volume balanced
+      expect(slots.orchestrator).toBe("anthropic/claude-opus-4-8"); // orchestration → Claude Opus even under balance
     });
   });
 

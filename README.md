@@ -35,7 +35,7 @@ Everything that matters is preserved: `.cerebro/` runtime state, the four slash 
 
 Open X-Men uses canonical role-based model slots. Each agent runs on the slot that fits its work.
 
-**Provider presets.** `install` asks which model subscription(s) you have (OpenAI, Anthropic, or both — a multi-select) and a focus (**performance / balance / cost**), then picks **the best model per agent across the subscriptions you own**: with both providers you get genuine best-of-breed (Claude Opus for the auditor/planner/design, GPT-5.5 for coding), and with one you get the best available within it. The choice is saved to `~/.config/opencode/open-xmen.json` and read by the plugin at load. Image generation is OpenAI-only, so the image slot always uses `openai/gpt-image-2`.
+**Provider presets.** `install` asks which model subscription(s) you have (OpenAI, Anthropic, or both — a multi-select) and a focus (**performance / balance / cost**), then picks **the best model per agent across the subscriptions you own**: with both providers you get genuine best-of-breed (Claude Opus for orchestration, auditing, planning, and design; GPT-5.5 for coding), and with one you get the best available within it. **Cerebro (the orchestrator) gets a frontier model even under `balance`** — Claude Opus when Anthropic is owned, GPT-5.5 otherwise — because it drives long-horizon multi-agent runs where weak coordination compounds; only the `cost` focus drops it to a cheaper model. The choice is saved to `~/.config/opencode/open-xmen.json` and read by the plugin at load. Image generation is OpenAI-only, so the image slot always uses `openai/gpt-image-2`.
 
 The default mapping (no preset configured — OpenAI / balance baseline):
 
