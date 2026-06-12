@@ -234,8 +234,9 @@ export const CerebroPlugin: Plugin = async (input) => {
     },
 
     async "experimental.chat.system.transform"(_input, output) {
+      const projectRoot = ctx.worktree || ctx.directory;
       output.system.push(
-        "Cerebro OpenCode runtime is active. Runtime state lives under `.cerebro/`. Use the cerebro_* custom tools for run coordination, task tracking, mailbox, checkpoints, and pending-todo verification."
+        `Cerebro OpenCode runtime is active. The project root is \`${projectRoot}\` — your current working directory. Runtime state lives under \`${projectRoot}/.cerebro/\`. When writing notepad, plan, or other runtime files, use the path exactly as given relative to the project root (e.g. \`.cerebro/notepads/...\`); never expand it to a guessed absolute path or assume a different base such as \`/Users/...\`. Use the cerebro_* custom tools for run coordination, task tracking, mailbox, checkpoints, and pending-todo verification.`
       );
       if (!sessionCheckDone) {
         sessionCheckDone = true;
