@@ -510,9 +510,9 @@ export function createBeastAgent(
     "Beast",
     "Gap analyst and plan/code critique specialist.",
     BEAST_PROMPT,
-    modelChain("emma-frost")[0],
+    modelChain("beast")[0],
     { ...DEFAULT_OPENCODE_META, variant: "high", permission: { edit: "deny", bash: "ask", webfetch: "ask", task: "deny", skill: "allow" } },
-    model ?? modelChain("emma-frost"),
+    model ?? modelChain("beast"),
     customPrompt,
     customAppendPrompt,
   );
