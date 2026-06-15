@@ -1,6 +1,6 @@
 ---
 name: opx-playwright
-description: Browser automation and UI verification with Playwright — test pages, fill forms, take screenshots, check responsive layouts, validate UX, exercise login flows, and check links. Prefers the Playwright MCP server when available; otherwise runs npx playwright scripts.
+description: Browser automation and UI verification with Playwright — render/interaction checks, screenshots, responsive layouts, forms, and login flows. Use to prove a UI change works.
 ---
 
 This skill drives a real browser to verify and automate UI work: rendering, interactions, responsive behavior, accessibility, login flows, and link health. Use it to *prove* a UI change works rather than asserting it does.

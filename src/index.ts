@@ -288,7 +288,7 @@ export const CerebroPlugin: Plugin = async (input) => {
 
     tool: {
       cerebro_model_slots: tool({
-        description: "Return the configured Cerebro models: `slots` are the role/category defaults and `agents` is the model each agent actually resolves to (per-agent open-xmen.json override → preset → default). Spawned agents run on their `agents` model, which may differ from the role slot.",
+        description: "Return configured Cerebro models: `slots` are the role/category defaults; `agents` is the model each agent resolves to (may differ from its role slot).",
         args: {},
         async execute() {
           return JSON.stringify({ slots: modelSlots(), agents: agentModels() }, null, 2);
@@ -355,7 +355,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_task_create: tool({
-        description: "Create a task record for a Cerebro run. Include category, files, depends_on, and verification_commands when creating records from a plan so cerebro_next_tasks can route and batch them and cerebro_verify can check them deterministically.",
+        description: "Create a task record for a Cerebro run. Populate category, files, depends_on, and verification_commands so cerebro_next_tasks can route/batch and cerebro_verify can check it.",
         args: {
           run_id: tool.schema.string().min(1),
           subject: tool.schema.string().min(1),
@@ -364,7 +364,7 @@ export const CerebroPlugin: Plugin = async (input) => {
           category: tool.schema.enum(["visual-engineering", "architecture", "explore", "research", "deep", "quick"]).optional(),
           verification_commands: tool.schema.array(tool.schema.string().min(1)).optional(),
           depends_on: tool.schema.array(tool.schema.string()).optional(),
-          files: tool.schema.array(tool.schema.string().min(1)).optional().describe("Repo-relative file paths this task is expected to WRITE; cerebro_next_tasks uses them to avoid co-scheduling tasks that touch the same file in a parallel batch. Pass an explicit empty array [] for read-only tasks (scouts, research, test-only) so they still parallelize. OMIT entirely only when the footprint is genuinely unknown — such a task is scheduled alone."),
+          files: tool.schema.array(tool.schema.string().min(1)).optional().describe("Repo-relative paths this task WRITES (for parallel-batch conflict avoidance). Pass [] for read-only tasks so they still parallelize; omit only if the footprint is unknown (task then runs alone)."),
         },
         execute: (args, toolContext) => mutex.serialize(args.run_id, async () => {
           const tasks = await loadTasks(ctx, args.run_id);
@@ -498,7 +498,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_problem_report: tool({
-        description: "Record a structured workflow problem visible to the user and persisted for plugin improvement. Use for blockers, failed verification, retries, confusing plans, missing tools, weak evidence, or runtime UX gaps.",
+        description: "Record a structured workflow problem (persisted as an improvement backlog). Use for blockers, failures, retries, or weak evidence.",
         args: {
           run_id: tool.schema.string().min(1),
           title: tool.schema.string().min(1),
@@ -554,7 +554,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_run_report: tool({
-        description: "Build a consolidated end-of-run report for a Cerebro run: task ledger summary, blocked/failed tasks, and workflow problems grouped by severity. Use this for the final report instead of scraping the run files manually.",
+        description: "Build a consolidated end-of-run report: task ledger summary, blocked/failed tasks, and workflow problems grouped by severity.",
         args: {
           run_id: tool.schema.string().min(1),
         },
@@ -605,7 +605,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_next_tasks: tool({
-        description: "Return the next batch of ready tasks for a run — the dependency frontier with no unmet deps and no file conflicts — each with its routed agent. **It claims the returned tasks** (marks them `active`) so they won't be handed out twice, which is what makes parallel waves safe: spawn ALL the returned tasks concurrently (multiple `task` calls in one message), verify each with cerebro_verify, then call this again for the next wave. Empty `ready` with `blocked`/`deadlocked` means nothing can proceed; empty `ready` with remaining 0 means all tasks are complete (run the audit).",
+        description: "Return and CLAIM the next batch of ready tasks (no unmet deps, no file conflicts), each with its routed agent — claiming marks them `active` so they're never handed out twice. Empty `ready` with `blocked`/`deadlocked` = nothing can proceed; empty `ready` with remaining 0 = all complete (run the audit).",
         args: {
           run_id: tool.schema.string().min(1),
           max_parallel: tool.schema.number().int().min(1).max(8).optional().describe("Max tasks to return (and claim) for this wave (default 4)"),
@@ -629,7 +629,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       }),
 
       cerebro_verify: tool({
-        description: "Run a task's verification commands in a real shell and record the result on the ledger. This is the deterministic verification gate: a task only reaches status `verified` through this tool — never mark a task verified by judgment. On PASS (with commands) the task is set to `verified`. On FAIL it increments the task's `attempts` and requeues it (status → `pending`) so the next cerebro_next_tasks wave re-dispatches it, until it exhausts the retry budget and is auto-`blocked` (a blocker problem is recorded). With no commands it returns SKIPPED (mark `done` via cerebro_task_update if appropriate). A command that looks plainly destructive is REFUSED unrun (a blocker problem is recorded).",
+        description: "Run a task's verification_commands in a real shell and record results on the ledger. The ONLY path to status `verified` — never mark verified by judgment. Returns PASS (→`verified`), FAIL (auto-requeued and retried, then auto-`blocked`), SKIPPED (no commands; use cerebro_task_update), or REFUSED (command looked destructive).",
         args: {
           run_id: tool.schema.string().min(1),
           task_id: tool.schema.string().min(1),

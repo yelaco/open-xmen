@@ -83,13 +83,9 @@ Focus on:
 - **Spatial Composition**: Unexpected layouts. Asymmetry. Overlap. Diagonal flow. Grid-breaking elements. Generous negative space OR controlled density.
 - **Backgrounds & Visual Details**: Create atmosphere and depth rather than defaulting to solid colors. Add contextual effects and textures that match the overall aesthetic. Apply creative forms like gradient meshes, noise textures, geometric patterns, layered transparencies, dramatic shadows, decorative borders, custom cursors, and grain overlays.
 
-NEVER use generic AI-generated aesthetics like overused font families (Inter, Roboto, Arial, system fonts), cliched color schemes (particularly purple gradients on white backgrounds), predictable layouts and component patterns, and cookie-cutter design that lacks context-specific character.
+NEVER use generic AI-generated aesthetics: overused fonts (Inter, Roboto, Arial, system fonts, or a default like Space Grotesk), cliched color schemes (especially purple gradients on white), predictable layouts, and cookie-cutter patterns that lack context-specific character. Make unexpected choices that feel genuinely designed for the context — no two designs should converge; vary themes, fonts, and aesthetics across generations.
 
-Interpret creatively and make unexpected choices that feel genuinely designed for the context. No design should be the same. Vary between light and dark themes, different fonts, different aesthetics. NEVER converge on common choices (Space Grotesk, for example) across generations.
-
-**IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
-
-Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
+**IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well — don't hold back; commit fully to a distinctive vision.
 ` },
   { path: "skills/opx-git/SKILL.md", content: `---
 name: opx-git
@@ -141,7 +137,7 @@ When run inside a Cerebro task, fold the result into your \`TASK_RESULT\` (commi
 ` },
   { path: "skills/opx-personal-assistant/SKILL.md", content: `---
 name: opx-personal-assistant
-description: How Cerebro talks to the user while orchestrating — the personal-assistant interaction layer. Narrate every phase, translate tool output into plain status, confirm at gates, and never go silent. Use whenever orchestrating a non-trivial request.
+description: Personal-assistant interaction layer for Cerebro — how to narrate, report status, and confirm at gates while orchestrating. Use whenever orchestrating a non-trivial request.
 ---
 
 This skill governs **how you keep the user informed** while you orchestrate. It does not define the orchestration process — that lives in Cerebro's own instructions (the four phases: Intent Gate → Codebase Assessment → Smart Delegation → Independent Verification). This is purely the voice and reporting layer that makes the whole thing feel like a competent personal assistant rather than a black box.
@@ -174,7 +170,7 @@ When you do ask, use the interactive **\`question\` tool** so the user picks fro
 ` },
   { path: "skills/opx-playwright/SKILL.md", content: `---
 name: opx-playwright
-description: Browser automation and UI verification with Playwright — test pages, fill forms, take screenshots, check responsive layouts, validate UX, exercise login flows, and check links. Prefers the Playwright MCP server when available; otherwise runs npx playwright scripts.
+description: Browser automation and UI verification with Playwright — render/interaction checks, screenshots, responsive layouts, forms, and login flows. Use to prove a UI change works.
 ---
 
 This skill drives a real browser to verify and automate UI work: rendering, interactions, responsive behavior, accessibility, login flows, and link health. Use it to *prove* a UI change works rather than asserting it does.
