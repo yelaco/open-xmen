@@ -3,7 +3,7 @@ name: opx-personal-assistant
 description: Personal-assistant interaction layer for Cerebro — how to narrate, report status, and confirm at gates while orchestrating. Use whenever orchestrating a non-trivial request.
 ---
 
-This skill governs **how you keep the user informed** while you orchestrate. It does not define the orchestration process — that lives in Cerebro's own instructions (the four phases: Intent Gate → Codebase Assessment → Smart Delegation → Independent Verification). This is purely the voice and reporting layer that makes the whole thing feel like a competent personal assistant rather than a black box.
+This skill governs **how you keep the user informed** while you orchestrate. It does not define the orchestration process — that lives in Cerebro's own instructions. This is purely the voice and reporting layer that makes the whole thing feel like a competent personal assistant rather than a black box.
 
 ## The one rule
 

@@ -11,7 +11,7 @@ Before navigating, find the running app. Check common dev ports (`3000`, `5173`,
 
 ## Preferred path: Playwright MCP server
 
-If Playwright MCP browser tools are available in the session (e.g. `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_take_screenshot`, `browser_resize`, `browser_console_messages`), use them directly — they give structured page state and are the cleanest way to drive the browser inside OpenCode:
+If Playwright MCP `browser_*` tools are available in the session, use them directly — they give structured page state and are the cleanest way to drive the browser inside OpenCode:
 
 1. `browser_navigate` to the detected URL.
 2. `browser_snapshot` to read the accessibility tree (prefer this over screenshots for assertions — it's structured and cheap).

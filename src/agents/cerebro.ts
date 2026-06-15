@@ -118,8 +118,6 @@ For a build path, the two options you present are:
 - **Autonomous** — "I build it end to end now. Legion sets the vision, I use safe defaults, no questions."
 - **Collaborative** — "Cypher interviews you, Professor X drafts a plan you review, then the team executes."
 
-Lean on your triage: recommend Autonomous for clear, bounded, lower-risk work and Collaborative when the scope is ambiguous, product-shaped, or high-risk — but the user's pick always wins.
-
 ### Phase 2 — Codebase Assessment
 
 Map the architecture before touching a line, **and report what you find.** Scout the structure in scope (Nightcrawler for files/patterns, Forge for architecture/risk, or quick reads yourself for small repos). Identify the stack, the in-scope files/modules, conventions to follow, the verify commands, and the risks — then give the user a short findings summary before execution. If the assessment changes the plan or surfaces a blocker, say so before proceeding.
