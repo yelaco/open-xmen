@@ -24,7 +24,7 @@ import {
 import { CEREBRO_COMMAND_DEFINITIONS } from "./commands/index.js";
 import { CEREBRO_COMMANDS, CEREBRO_RISKS, CEREBRO_TASK_STATUSES } from "./runtime/index.js";
 import { CEREBRO_MODEL_SLOT_KEYS, MODEL_SLOT_ENV, OPTIONAL_MCP_SERVERS, agentModels, enabledMcpServers, modelSlots } from "./config/models.js";
-import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent } from "./auto-update.js";
+import { scheduleOpenXmenAutoUpdate, shouldRunAutoUpdateForEvent, syncInstalledSkills } from "./auto-update.js";
 import type { TaskRecord, TaskStatus } from "./workflow/types.js";
 import {
   appendJsonl,
@@ -200,6 +200,12 @@ export const CerebroPlugin: Plugin = async (input) => {
   const mutex = createTaskMutex();
   const events = createEventRecorder(ctx);
   const { recordProgress, recordProblem } = events;
+
+  // Self-heal on-disk skills to the running package version. Auto-update reinstalls the package but
+  // not the global skills dir, so skills drift until a manual `open-xmen install`; after the
+  // post-update restart, the loaded code is the new version, so this writes the matching skills.
+  // Best-effort and silent — never block plugin load.
+  syncInstalledSkills();
 
   return {
     async event({ event }) {

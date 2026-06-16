@@ -2,7 +2,8 @@ import type { PluginInput } from "@opencode-ai/plugin";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { installOpenXmenPackageWorkspace } from "./cli/config.js";
+import { globalOpenCodeConfigDir, installOpenXmenPackageWorkspace } from "./cli/config.js";
+import { refreshSkillsIfStale } from "./cli/runtime.js";
 import { tryParseJsonc } from "./cli/jsonc.js";
 
 const PACKAGE_NAME = "open-xmen";
@@ -71,6 +72,40 @@ export async function runOpenXmenAutoUpdate(ctx: PluginInput): Promise<AutoUpdat
 
   await showToast(ctx, "Open X-Men updated", `${currentVersion} → ${latestVersion}. Restart OpenCode to use the new plugin code.`, "success");
   return { status: "updated", currentVersion, latestVersion, workspace };
+}
+
+export function currentPackageVersion(): string | undefined {
+  const packageRoot = findPackageRoot(path.dirname(fileURLToPath(import.meta.url)));
+  if (!packageRoot) return undefined;
+  const packageJson = readJson(path.join(packageRoot, "package.json"));
+  return isRecord(packageJson) && typeof packageJson.version === "string" ? packageJson.version : undefined;
+}
+
+// Self-heal the global skills dir to match the running package version. Auto-update reinstalls the
+// npm package but never touches <configDir>/skills, so on-disk skills drift until a manual install.
+// Run this once at plugin load (after the post-update restart, the loaded code IS the new version,
+// so this writes the new skills). Best-effort and silent: never block or break plugin startup.
+export function syncInstalledSkills(): { status: string; detail?: string } {
+  try {
+    const packageRoot = findPackageRoot(path.dirname(fileURLToPath(import.meta.url)));
+    if (!packageRoot) return { status: "skipped-no-package-root" };
+    // Local checkouts manage skills via `open-xmen install` themselves — don't clobber them.
+    if (existsSync(path.join(packageRoot, ".git"))) return { status: "skipped-local-development" };
+    const version = currentPackageVersion();
+    if (!version) return { status: "skipped-no-version" };
+    let configDir: string;
+    try {
+      configDir = globalOpenCodeConfigDir();
+    } catch {
+      return { status: "skipped-no-config-dir" };
+    }
+    const result = refreshSkillsIfStale(configDir, version);
+    return result.refreshed
+      ? { status: "refreshed", detail: `${result.count} skills → ${version}` }
+      : { status: `skipped-${result.reason}` };
+  } catch (error) {
+    return { status: "failed", detail: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 async function fetchLatestVersion() {

@@ -6,6 +6,7 @@ import path from "node:path";
 import { CEREBRO_FOCUSES, CEREBRO_PROVIDERS, OPTIONAL_MCP_SERVERS, agentModels, configAgentOverrides, loadPresetSelection, modelSlots, presetAgentModels } from "./config/models.js";
 import type { CerebroFocus, CerebroProvider } from "./config/models.js";
 import { installSkills, uninstallSkills } from "./cli/runtime.js";
+import { currentPackageVersion } from "./auto-update.js";
 import { parseMcpArg, parseProviderArg } from "./cli/args.js";
 import { globalOpenCodeConfigDir, removeOpenXmenConfig, removeOpencodeConfig, updateOpencodeConfig, warmOpenCodePluginCache, writeOpenXmenConfig } from "./cli/config.js";
 import { runOpenCodeDoctor } from "./cli/doctor.js";
@@ -208,7 +209,8 @@ async function install(args: string[]) {
   });
 
   // Skills are user-global so OpenCode can discover them regardless of where the plugin entry lives.
-  const skillCount = installSkills(globalConfigDir, { dryRun: options.dryRun, planned });
+  // Stamp the package version so the plugin's self-heal can detect drift after future auto-updates.
+  const skillCount = installSkills(globalConfigDir, { dryRun: options.dryRun, planned, version: currentPackageVersion() });
 
   const patch: { providers?: CerebroProvider[]; focus?: CerebroFocus; mcp_servers?: string[]; agents?: Record<string, string> } = {};
   if (selection) { patch.providers = selection.providers; patch.focus = selection.focus; }
