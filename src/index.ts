@@ -265,6 +265,7 @@ export const CerebroPlugin: Plugin = async (input) => {
       const prelude = [
         "Cerebro OpenCode runtime is active.",
         "Before acting, use the Cerebro coordination tools for run state, mailbox, checkpoints, pending-todo checks, and model-slot lookup.",
+        "Keep a live sidebar TODO via the `todowrite` tool for the entire run: call `todowrite` the moment the run starts (a short phase checklist), refine it to one item per task once tasks exist, and update statuses as each wave starts and verifies. The sidebar must never sit empty while a run is active.",
         "Runtime root: `.cerebro/`. Preserve command names and role names.",
       ].join("\n");
       const firstText = output.parts.find((part) => part.type === "text");
