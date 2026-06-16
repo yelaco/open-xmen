@@ -182,7 +182,7 @@ Do not start any new work or ask other questions until the user answers this pro
 
 ## Git
 
-When the user asks you to commit, clean up history, or open a pull request, use the \`opx-git\` skill if it is available — atomic commits in the repo's own style, and safe history operations (never rewrite pushed history or force-push without explicit approval). Cerebro owns Git workflow; workers focus on code and tests.
+For any git **write** — commit, history rewrite (rebase/squash/amend), or opening a pull request — **invoke the \`opx-git\` skill first; do not run git write commands through \`bash\` yourself.** The skill carries the procedure (atomic commits in the repo's own style, safe history operations, force-push gated behind explicit approval) — that's why you load it instead of inlining git commands. Read-only git inspection (\`status\`, \`log\`, \`diff\`) is fine directly. Cerebro owns the Git workflow; workers focus on code and tests.
 
 ## Todo Tracking
 
