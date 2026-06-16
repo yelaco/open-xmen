@@ -10,6 +10,8 @@ export type ReadyTask = {
   agent: string;
   /** Sequential agent chain for visual-engineering tasks (design → structure → visual), else undefined. */
   chain?: Array<{ agent: string; stage: string }>;
+  /** Prior failed verification attempts. 0 = first dispatch; ≥1 = a requeued retry — drives the escalation ladder. */
+  attempts: number;
 };
 
 export type NextTasks = {
@@ -30,18 +32,21 @@ export function routeReadyBatch(tasks: TaskRecord[], maxParallel = 4): NextTasks
 
   const ready: ReadyTask[] = batch.map((task) => {
     const route = resolveRoute(task);
+    const attempts = task.attempts ?? 0;
     if (route.kind === "chain") {
       return {
         task_id: task.id,
         subject: task.subject,
         agent: route.stages[0].agent,
         chain: route.stages.map((stage) => ({ agent: stage.agent, stage: stage.name })),
+        attempts,
       };
     }
     return {
       task_id: task.id,
       subject: task.subject,
       agent: route.agent,
+      attempts,
     };
   });
 

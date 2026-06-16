@@ -55,6 +55,15 @@ describe("routeReadyBatch", () => {
     expect(t.chain?.map((s) => s.agent)).toEqual(["jean-grey", "wolverine", "storm"]);
   });
 
+  test("surfaces the attempts count so the retry-escalation ladder can branch", () => {
+    const next = routeReadyBatch([
+      makeTask({ id: "fresh", category: "quick", files: ["src/a.ts"] }),
+      makeTask({ id: "requeued", category: "quick", files: ["src/b.ts"], attempts: 2 }),
+    ]);
+    expect(next.ready.find((t) => t.task_id === "fresh")!.attempts).toBe(0);
+    expect(next.ready.find((t) => t.task_id === "requeued")!.attempts).toBe(2);
+  });
+
   test("flags a deadlock when the frontier is empty and a dep is blocked", () => {
     const next = routeReadyBatch([
       makeTask({ id: "a", status: "blocked" }),
